@@ -1,0 +1,12 @@
+DirectoryIndex index.php
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /
+  
+  # Forward /blog/some-slug to /blog/post.php?slug=some-slug
+  # But exclude actual physical files (like post.php itself or style sheets)
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteRule ^blog/([^/]+)/?$ blog/post.php?slug=$1 [L,QSA]
+</IfModule>

@@ -1,0 +1,38 @@
+# robots.txt for AstroYu - SEO & AI Optimized
+# For more info: https://www.robotstxt.org/
+
+# Group 1: General Web Crawlers & AI Search Engines
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /admin/
+
+# Group 2: Allow Generative AI Crawlers to index products and services
+# This helps AstroYu show up in AI search engines like ChatGPT Search, Perplexity, and Google Gemini
+User-agent: GPTBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: Claude-Web
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: cohere-ai
+Allow: /
+
+# Group 3: Block aggressive scrapers that waste bandwidth but don't provide search value
+User-agent: CCBot
+Disallow: /
+
+User-agent: OMGILLCbot
+Disallow: /
+
+# Sitemap URL (Generated dynamically by @astrojs/sitemap)
+Sitemap: https://astroyu.com/sitemap-index.xml

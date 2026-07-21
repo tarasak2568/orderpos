@@ -1,0 +1,14 @@
+# DB config
+config/db_connect.php
+config/db.php
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
