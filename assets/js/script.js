@@ -129,6 +129,319 @@ function formatTime(dateStr) {
   });
 }
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+// ============================================
+// Shared Member CRM Checkout Picker (POS & Billing)
+// ============================================
+class MemberCheckoutPicker {
+  constructor(containerId, options = {}) {
+    this.container = document.getElementById(containerId);
+    this.onTotalsChange =
+      typeof options.onTotalsChange === "function"
+        ? options.onTotalsChange
+        : () => {};
+    this.config = {
+      member_point_rate: parseInt(options.config?.member_point_rate ?? 25, 10) || 0,
+      member_redeem_value:
+        parseFloat(options.config?.member_redeem_value ?? 1.0) || 0,
+    };
+    this.grossAmount = 0;
+    this.selectedMember = null;
+    this.pointsToRedeem = 0;
+    this.searchResults = [];
+    this.showQuickRegister = false;
+    this.render();
+  }
+
+  reset(grossAmount = 0) {
+    this.grossAmount = Math.max(0, parseFloat(grossAmount) || 0);
+    this.selectedMember = null;
+    this.pointsToRedeem = 0;
+    this.searchResults = [];
+    this.showQuickRegister = false;
+    this.render();
+    this.notifyTotals();
+  }
+
+  setGrossAmount(grossAmount) {
+    this.grossAmount = Math.max(0, parseFloat(grossAmount) || 0);
+    this.render();
+    this.notifyTotals();
+  }
+
+  calculateTotals() {
+    const gross = Math.max(0, Math.round(this.grossAmount * 100) / 100);
+    const pointRate = Math.max(0, parseInt(this.config.member_point_rate, 10) || 0);
+    const redeemValue = Math.max(
+      0,
+      parseFloat(this.config.member_redeem_value) || 0,
+    );
+
+    if (!this.selectedMember) {
+      return {
+        gross_amount: gross,
+        tier_discount: 0,
+        points_redeemed: 0,
+        point_discount: 0,
+        discount_amount: 0,
+        net_amount: gross,
+        points_earned: 0,
+      };
+    }
+
+    const discPct = Math.min(
+      100,
+      Math.max(0, parseFloat(this.selectedMember.discount_percent) || 0),
+    );
+    const tierDiscount = Math.round(gross * (discPct / 100) * 100) / 100;
+    const afterTier = Math.max(0, Math.round((gross - tierDiscount) * 100) / 100);
+
+    const availablePts = Math.max(0, parseInt(this.selectedMember.points, 10) || 0);
+    const wantedPts = Math.max(0, parseInt(this.pointsToRedeem, 10) || 0);
+    let usedPts = 0;
+    let pointDiscount = 0;
+    if (redeemValue > 0 && availablePts > 0 && wantedPts > 0 && afterTier > 0) {
+      const maxPtsByTotal = Math.floor(afterTier / redeemValue);
+      usedPts = Math.min(wantedPts, availablePts, maxPtsByTotal);
+      pointDiscount = Math.round(usedPts * redeemValue * 100) / 100;
+    }
+
+    const totalDiscount = Math.min(
+      gross,
+      Math.round((tierDiscount + pointDiscount) * 100) / 100,
+    );
+    const netAmount = Math.max(
+      0,
+      Math.round((gross - totalDiscount) * 100) / 100,
+    );
+    const pointsEarned =
+      pointRate > 0 ? Math.floor(netAmount / pointRate) : 0;
+
+    return {
+      gross_amount: gross,
+      tier_discount: tierDiscount,
+      points_redeemed: usedPts,
+      point_discount: pointDiscount,
+      discount_amount: totalDiscount,
+      net_amount: netAmount,
+      points_earned: pointsEarned,
+    };
+  }
+
+  getSelection() {
+    const totals = this.calculateTotals();
+    return {
+      member_id: this.selectedMember ? this.selectedMember.id : 0,
+      points_redeemed: totals.points_redeemed,
+      totals,
+    };
+  }
+
+  notifyTotals() {
+    this.onTotalsChange(this.calculateTotals());
+  }
+
+  async lookup(queryStr) {
+    const q = (queryStr || "").trim();
+    if (!q) {
+      this.searchResults = [];
+      this.render();
+      return;
+    }
+    try {
+      const res = await API.get(
+        `members.php?action=lookup&q=${encodeURIComponent(q)}`,
+      );
+      if (res.loyalty_config) {
+        this.config = res.loyalty_config;
+      }
+      this.searchResults = res.data || [];
+      if (
+        this.searchResults.length === 1 &&
+        this.searchResults[0].phone === q.replace(/[\s\-().]+/g, "")
+      ) {
+        this.selectMember(this.searchResults[0]);
+      } else {
+        this.render();
+      }
+    } catch (e) {
+      // handled by API
+    }
+  }
+
+  selectMember(member) {
+    this.selectedMember = member;
+    this.pointsToRedeem = 0;
+    this.searchResults = [];
+    this.showQuickRegister = false;
+    this.render();
+    this.notifyTotals();
+  }
+
+  clearMember() {
+    this.selectedMember = null;
+    this.pointsToRedeem = 0;
+    this.searchResults = [];
+    this.render();
+    this.notifyTotals();
+  }
+
+  async quickRegister(fullName, phone) {
+    if (!fullName.trim() || phone.trim().length < 8) {
+      showToast("กรุณาระบุชื่อและเบอร์โทรสมาชิกอย่างน้อย 8 หลัก", "warning");
+      return;
+    }
+    try {
+      const res = await API.post("members.php", {
+        full_name: fullName.trim(),
+        phone: phone.trim(),
+        tier: "bronze",
+      });
+      showToast("สมัครสมาชิกใหม่เรียบร้อยแล้ว!", "success");
+      if (res.data) {
+        this.selectMember(res.data);
+      }
+    } catch (e) {
+      // handled
+    }
+  }
+
+  render() {
+    if (!this.container) return;
+    const totals = this.calculateTotals();
+    const idPrefix = this.container.id;
+
+    if (this.selectedMember) {
+      const m = this.selectedMember;
+      const tierInfo = m.tier_info || {
+        label: m.tier || "Member",
+        bg: "#FFF3ED",
+        color: "#C2410C",
+      };
+      const redeemDisabled =
+        this.config.member_redeem_value <= 0 || m.points <= 0;
+
+      this.container.innerHTML = `
+        <div style="background:#FFF7ED;border:1.5px solid #FDBA74;border-radius:10px;padding:12px;margin-bottom:14px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;">
+            <div>
+              <strong style="color:#9A3412;"><i class="fas fa-address-card"></i> ${escapeHtml(m.full_name)}</strong>
+              <span style="display:inline-block;margin-left:6px;padding:1px 8px;border-radius:999px;font-size:11px;font-weight:700;background:${escapeHtml(tierInfo.bg)};color:${escapeHtml(tierInfo.color)};">${escapeHtml(tierInfo.label)}</span>
+              <div style="font-size:12px;color:#7C2D12;">โทร: ${escapeHtml(m.phone)} · แต้มสะสม: <strong>${Number(m.points).toLocaleString()}</strong> แต้ม${m.discount_percent > 0 ? ` · ส่วนลด ${m.discount_percent}%` : ""}</div>
+            </div>
+            <button type="button" class="btn btn-sm btn-outline" data-mbr-clear="1" style="padding:4px 10px;">เปลี่ยน</button>
+          </div>
+          ${!redeemDisabled ? `
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px;padding-top:8px;border-top:1px dashed #FDBA74;">
+            <label for="${idPrefix}_pts" style="font-size:12.5px;margin:0;color:#7C2D12;">แลกแต้มส่วนลด (1 แต้ม = ${formatCurrency(this.config.member_redeem_value)}):</label>
+            <input type="number" id="${idPrefix}_pts" min="0" max="${m.points}" value="${totals.points_redeemed}" style="width:90px;padding:5px 8px;border:1px solid #FDBA74;border-radius:6px;font-family:inherit;font-size:13px;">
+          </div>` : ""}
+          <div style="display:flex;justify-content:space-between;font-size:12.5px;color:#065F46;margin-top:8px;padding-top:8px;border-top:1px dashed #FDBA74;">
+            <span>ส่วนลดรวม: <strong>-${formatCurrency(totals.discount_amount)}</strong></span>
+            <span>หลังชำระจะได้รับเพิ่ม: <strong>+${totals.points_earned} แต้ม</strong></span>
+          </div>
+        </div>
+      `;
+
+      const clearBtn = this.container.querySelector("[data-mbr-clear]");
+      if (clearBtn) {
+        clearBtn.addEventListener("click", () => this.clearMember());
+      }
+      const ptsInput = document.getElementById(`${idPrefix}_pts`);
+      if (ptsInput) {
+        ptsInput.addEventListener("input", (e) => {
+          this.pointsToRedeem = Math.max(0, parseInt(e.target.value, 10) || 0);
+          const nextTotals = this.calculateTotals();
+          const summaryDiv = ptsInput.parentElement?.nextElementSibling;
+          if (summaryDiv) {
+            summaryDiv.innerHTML = `
+              <span>ส่วนลดรวม: <strong>-${formatCurrency(nextTotals.discount_amount)}</strong></span>
+              <span>หลังชำระจะได้รับเพิ่ม: <strong>+${nextTotals.points_earned} แต้ม</strong></span>
+            `;
+          }
+          this.notifyTotals();
+        });
+      }
+      return;
+    }
+
+    this.container.innerHTML = `
+      <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:12px;margin-bottom:14px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <span style="font-size:13px;font-weight:600;color:#334155;"><i class="fas fa-address-card" style="color:var(--primary);"></i> สมาชิกลูกค้า / สะสมแต้ม (ไม่บังคับ)</span>
+          <button type="button" data-mbr-toggle-reg="1" style="background:none;border:none;color:var(--primary);font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;">
+            ${this.showQuickRegister ? "ปิดฟอร์มสมัคร" : "+ สมัครสมาชิกด่วน"}
+          </button>
+        </div>
+        <div style="display:flex;gap:6px;">
+          <input type="text" id="${idPrefix}_search" placeholder="ใส่เบอร์โทร หรือชื่อสมาชิก..." style="flex:1;padding:8px 10px;border:1.5px solid #CBD5E1;border-radius:8px;font-family:inherit;font-size:13px;">
+          <button type="button" class="btn btn-sm btn-outline" data-mbr-search-btn="1"><i class="fas fa-search"></i> ค้นหา</button>
+        </div>
+        ${this.searchResults.length > 0 ? `
+          <div style="display:flex;flex-direction:column;gap:5px;margin-top:8px;max-height:140px;overflow-y:auto;">
+            ${this.searchResults.map((m, idx) => `
+              <button type="button" data-mbr-pick="${idx}" style="text-align:left;padding:7px 10px;border:1px solid #CBD5E1;border-radius:7px;background:#FFF;cursor:pointer;font-family:inherit;font-size:12.5px;display:flex;justify-content:space-between;align-items:center;">
+                <span><strong>${escapeHtml(m.full_name)}</strong> (${escapeHtml(m.phone)})</span>
+                <span style="color:#FF6B35;font-weight:600;">${Number(m.points).toLocaleString()} แต้ม</span>
+              </button>
+            `).join("")}
+          </div>
+        ` : ""}
+        ${this.showQuickRegister ? `
+          <div style="margin-top:10px;padding-top:10px;border-top:1px dashed #CBD5E1;display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+            <input type="text" id="${idPrefix}_reg_name" placeholder="ชื่อลูกค้า *" style="padding:7px 9px;border:1px solid #CBD5E1;border-radius:6px;font-family:inherit;font-size:12.5px;">
+            <input type="tel" id="${idPrefix}_reg_phone" placeholder="เบอร์โทร *" style="padding:7px 9px;border:1px solid #CBD5E1;border-radius:6px;font-family:inherit;font-size:12.5px;">
+            <button type="button" class="btn btn-sm btn-primary" data-mbr-reg-save="1" style="grid-column:1/-1;">บันทึกสมาชิก & ใช้สิทธิ์ทันที</button>
+          </div>
+        ` : ""}
+      </div>
+    `;
+
+    const searchBtn = this.container.querySelector("[data-mbr-search-btn]");
+    const searchInput = document.getElementById(`${idPrefix}_search`);
+    if (searchBtn && searchInput) {
+      searchBtn.addEventListener("click", () => this.lookup(searchInput.value));
+      searchInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          this.lookup(searchInput.value);
+        }
+      });
+    }
+    const toggleReg = this.container.querySelector("[data-mbr-toggle-reg]");
+    if (toggleReg) {
+      toggleReg.addEventListener("click", () => {
+        this.showQuickRegister = !this.showQuickRegister;
+        this.render();
+      });
+    }
+    this.container.querySelectorAll("[data-mbr-pick]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const idx = parseInt(btn.getAttribute("data-mbr-pick"), 10);
+        if (this.searchResults[idx]) {
+          this.selectMember(this.searchResults[idx]);
+        }
+      });
+    });
+    const saveRegBtn = this.container.querySelector("[data-mbr-reg-save]");
+    if (saveRegBtn) {
+      saveRegBtn.addEventListener("click", () => {
+        const n = document.getElementById(`${idPrefix}_reg_name`)?.value || "";
+        const p = document.getElementById(`${idPrefix}_reg_phone`)?.value || "";
+        this.quickRegister(n, p);
+      });
+    }
+  }
+}
+
 // ============================================
 // Customer Menu Page
 // ============================================
@@ -592,16 +905,42 @@ class StaffPOS {
     }
   }
 
+  getNetCheckoutTotal() {
+    if (this.memberPicker) {
+      return this.memberPicker.calculateTotals().net_amount;
+    }
+    return this.getTotalPrice();
+  }
+
   openInstantCheckout() {
     if (this.cart.length === 0) {
       showToast("กรุณาเลือกสินค้าเข้าตะกร้าก่อนคิดเงิน", "warning");
       return;
     }
-    const total = this.getTotalPrice();
+    const gross = this.getTotalPrice();
+    this._cashTouched = false;
+    if (!this.memberPicker && document.getElementById("posMemberBox")) {
+      this.memberPicker = new MemberCheckoutPicker("posMemberBox", {
+        config: window.ORDERPOS_POS_CONFIG?.loyalty || {},
+        onTotalsChange: (totals) => {
+          const totalEl = document.getElementById("posPayTotalDisplay");
+          if (totalEl) totalEl.textContent = formatCurrency(totals.net_amount);
+          const cashEl = document.getElementById("posCashReceived");
+          if (cashEl && !this._cashTouched) {
+            cashEl.value = totals.net_amount;
+          }
+          this.updateChangeDisplay();
+        },
+      });
+    }
+    if (this.memberPicker) {
+      this.memberPicker.reset(gross);
+    }
+    const net = this.getNetCheckoutTotal();
     document.getElementById("posPayTotalDisplay").textContent =
-      formatCurrency(total);
+      formatCurrency(net);
     document.getElementById("posPayMethod").value = "cash";
-    document.getElementById("posCashReceived").value = total;
+    document.getElementById("posCashReceived").value = net;
     this.toggleCashInput();
     this.updateChangeDisplay();
     openModal("posCheckoutModal");
@@ -621,22 +960,23 @@ class StaffPOS {
   }
 
   setQuickCash(val) {
-    const total = this.getTotalPrice();
+    const total = this.getNetCheckoutTotal();
     const input = document.getElementById("posCashReceived");
     if (!input) return;
+    this._cashTouched = true;
     input.value = val === "exact" ? total : val;
     this.updateChangeDisplay();
   }
 
   updateChangeDisplay() {
-    const total = this.getTotalPrice();
+    const total = this.getNetCheckoutTotal();
     const received =
       parseFloat(document.getElementById("posCashReceived")?.value) || 0;
     const changeBox = document.getElementById("posChangeBox");
     const changeEl = document.getElementById("posChangeAmount");
     if (!changeBox || !changeEl) return;
 
-    if (received >= total && total > 0) {
+    if (received >= total && (total > 0 || received > 0)) {
       changeEl.textContent = formatCurrency(received - total);
       changeBox.style.display = "block";
     } else {
@@ -646,7 +986,7 @@ class StaffPOS {
 
   async confirmInstantCheckout(event) {
     event.preventDefault();
-    const total = this.getTotalPrice();
+    const total = this.getNetCheckoutTotal();
     const method = document.getElementById("posPayMethod")?.value || "cash";
     const cashReceived =
       parseFloat(document.getElementById("posCashReceived")?.value) || 0;
@@ -658,12 +998,18 @@ class StaffPOS {
       return;
     }
 
+    const selection = this.memberPicker
+      ? this.memberPicker.getSelection()
+      : { member_id: 0, points_redeemed: 0 };
+
     try {
       const result = await API.post("orders.php?action=create", {
         table_id: tableId,
         instant_pay: true,
         payment_method: method,
         cash_received: method === "cash" ? cashReceived : total,
+        member_id: selection.member_id,
+        points_redeemed: selection.points_redeemed,
         items: this.cart.map((item) => ({
           menu_item_id: item.id,
           quantity: item.qty,
@@ -672,10 +1018,12 @@ class StaffPOS {
       });
 
       const change = result.data?.change_amount || 0;
+      const earned = parseInt(result.data?.points_earned || 0, 10);
+      const ptsSuffix = earned > 0 ? ` (+${earned} แต้ม)` : "";
       showToast(
-        method === "cash"
+        (method === "cash"
           ? `รับชำระเรียบร้อย! เงินทอน ${formatCurrency(change)}`
-          : "รับชำระเงินเรียบร้อย!",
+          : "รับชำระเงินเรียบร้อย!") + ptsSuffix,
         "success",
       );
       closeModal("posCheckoutModal");

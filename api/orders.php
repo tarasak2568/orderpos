@@ -36,6 +36,10 @@ switch ($action) {
         $instantPay = !empty($input['instant_pay']);
         $paymentMethod = escape($input['payment_method'] ?? 'cash');
         $cashReceived = floatval($input['cash_received'] ?? 0);
+        $memberId = intval($input['member_id'] ?? 0);
+        $pointsRedeemed = max(0, intval($input['points_redeemed'] ?? 0));
+        $staffUserId = !empty($_SESSION['user_id']) ? intval($_SESSION['user_id']) : null;
+        $createdBySql = $staffUserId ? $staffUserId : 'NULL';
         
         if (empty($items)) {
             echo json_encode(['success' => false, 'error' => 'ไม่มีรายการสินค้า'], JSON_UNESCAPED_UNICODE);
@@ -68,11 +72,20 @@ switch ($action) {
         // สร้าง order_no (ป้องกัน duplicate)
         $orderNo = 'ORD-' . $shopId . '-' . date('ymd') . '-' . str_pad(mt_rand(1, 9999), 4, '0', STR_PAD_LEFT);
         
-        // คำนวณยอดรวม
-        $totalAmount = 0;
+        // คำนวณยอดรวมตั้งต้นจากรายการสินค้า
+        $grossTotal = 0;
         foreach ($items as $item) {
-            $totalAmount += floatval($item['price']) * intval($item['quantity']);
+            $grossTotal += floatval($item['price']) * intval($item['quantity']);
         }
+        $grossTotal = round($grossTotal, 2);
+
+        $attachedMember = null;
+        if ($memberId > 0) {
+            $attachedMember = fetchOne(query("SELECT id, full_name, phone FROM members WHERE id = $memberId AND shop_id = $shopId AND is_active = 1 LIMIT 1"));
+        }
+        $memberSql = $attachedMember ? intval($attachedMember['id']) : 'NULL';
+        $custNameSql = $attachedMember ? "'" . escape($attachedMember['full_name']) . "'" : (!empty($input['customer_name']) ? "'" . escape(trim($input['customer_name'])) . "'" : 'NULL');
+        $custPhoneSql = $attachedMember ? "'" . escape($attachedMember['phone']) . "'" : (!empty($input['customer_phone']) ? "'" . escape(trim($input['customer_phone'])) . "'" : 'NULL');
         
         $initStatus = $instantPay ? 'paid' : 'pending';
         $initPayStatus = $instantPay ? 'paid' : 'unpaid';
@@ -80,8 +93,8 @@ switch ($action) {
         $paidAtSql = $instantPay ? "NOW()" : "NULL";
 
         // สร้างออเดอร์ผูกกับ shop_id
-        $orderResult = query("INSERT INTO orders (shop_id, order_no, table_id, note, total_amount, status, payment_status, payment_method, paid_at) 
-               VALUES ($shopId, '$orderNo', $tableId, '$note', $totalAmount, '$initStatus', '$initPayStatus', $payMethodSql, $paidAtSql)");
+        $orderResult = query("INSERT INTO orders (shop_id, order_no, table_id, member_id, customer_name, customer_phone, note, total_amount, status, payment_status, payment_method, paid_at, created_by) 
+               VALUES ($shopId, '$orderNo', $tableId, $memberSql, $custNameSql, $custPhoneSql, '$note', $grossTotal, '$initStatus', '$initPayStatus', $payMethodSql, $paidAtSql, $createdBySql)");
         
         if (!$orderResult) {
             global $conn;
@@ -108,14 +121,26 @@ switch ($action) {
                    WHERE id = $menuItemId AND shop_id = $shopId AND stock_qty IS NOT NULL");
         }
         
+        $netAmount = $grossTotal;
+        $discountAmount = 0.0;
+        $pointsEarned = 0;
+        $pointsUsed = 0;
         $changeAmount = 0;
+
         if ($instantPay) {
-            if ($cashReceived <= 0) {
-                $cashReceived = $totalAmount;
+            if ($attachedMember) {
+                $loyaltyResult = applyMemberLoyaltyOnOrderPaid($shopId, $orderId, intval($attachedMember['id']), $grossTotal, $pointsRedeemed, $staffUserId);
+                $netAmount = floatval($loyaltyResult['net_amount']);
+                $discountAmount = floatval($loyaltyResult['discount_amount']);
+                $pointsEarned = intval($loyaltyResult['points_earned']);
+                $pointsUsed = intval($loyaltyResult['points_redeemed']);
             }
-            $changeAmount = max(0, $cashReceived - $totalAmount);
-            query("INSERT INTO payments (shop_id, order_id, amount, payment_method, cash_received, change_amount) 
-                   VALUES ($shopId, $orderId, $totalAmount, '$paymentMethod', $cashReceived, $changeAmount)");
+            if ($cashReceived <= 0) {
+                $cashReceived = $netAmount;
+            }
+            $changeAmount = max(0, $cashReceived - $netAmount);
+            query("INSERT INTO payments (shop_id, order_id, amount, payment_method, cash_received, change_amount, paid_by) 
+                   VALUES ($shopId, $orderId, $netAmount, '$paymentMethod', $cashReceived, $changeAmount, $createdBySql)");
         } else {
             // อัปเดตสถานะโต๊ะเป็น occupied เฉพาะออเดอร์ที่ยังไม่จ่ายเงิน
             if ($rawTableCode !== 'WALKIN') {
@@ -129,7 +154,11 @@ switch ($action) {
             'data' => [
                 'order_id' => $orderId,
                 'order_no' => $orderNo,
-                'total_amount' => $totalAmount,
+                'gross_amount' => $grossTotal,
+                'discount_amount' => $discountAmount,
+                'total_amount' => $netAmount,
+                'points_earned' => $pointsEarned,
+                'points_redeemed' => $pointsUsed,
                 'change_amount' => $changeAmount
             ]
         ], JSON_UNESCAPED_UNICODE);
@@ -178,15 +207,20 @@ switch ($action) {
             exit;
         }
         
-        query("UPDATE orders SET status = '$status' WHERE id = $orderId AND shop_id = $shopId");
-        
         if ($status === 'paid') {
-            $orderResult = query("SELECT table_id FROM orders WHERE id = $orderId AND shop_id = $shopId");
+            $orderResult = query("SELECT id, table_id, member_id, payment_status, total_amount, discount_amount, points_redeemed FROM orders WHERE id = $orderId AND shop_id = $shopId LIMIT 1");
             $order = fetchOne($orderResult);
             if ($order) {
+                if (($order['payment_status'] ?? 'unpaid') !== 'paid' && !empty($order['member_id'])) {
+                    $gross = floatval($order['total_amount']) + floatval($order['discount_amount'] ?? 0);
+                    $staffUid = !empty($_SESSION['user_id']) ? intval($_SESSION['user_id']) : null;
+                    applyMemberLoyaltyOnOrderPaid($shopId, $orderId, intval($order['member_id']), $gross, intval($order['points_redeemed'] ?? 0), $staffUid);
+                }
                 query("UPDATE tables SET status = 'available' WHERE id = {$order['table_id']} AND shop_id = $shopId");
             }
-            query("UPDATE orders SET payment_status = 'paid', paid_at = NOW() WHERE id = $orderId AND shop_id = $shopId");
+            query("UPDATE orders SET status = 'paid', payment_status = 'paid', paid_at = NOW() WHERE id = $orderId AND shop_id = $shopId");
+        } else {
+            query("UPDATE orders SET status = '$status' WHERE id = $orderId AND shop_id = $shopId");
         }
         
         echo json_encode(['success' => true, 'message' => 'อัปเดตสถานะเรียบร้อย'], JSON_UNESCAPED_UNICODE);
@@ -200,9 +234,10 @@ switch ($action) {
         }
         
         $result = query("
-            SELECT o.*, t.table_name, t.table_code 
+            SELECT o.*, t.table_name, t.table_code, m.full_name AS member_name, m.tier AS member_tier, m.member_code
             FROM orders o 
             LEFT JOIN tables t ON o.table_id = t.id 
+            LEFT JOIN members m ON o.member_id = m.id
             $where 
             ORDER BY o.created_at DESC 
             LIMIT 50
@@ -260,22 +295,41 @@ switch ($action) {
         }
         
         $input = json_decode(file_get_contents('php://input'), true);
-        $orderId = intval($input['order_id']);
+        $orderId = intval($input['order_id'] ?? 0);
         $paymentMethod = escape($input['payment_method'] ?? 'cash');
         $cashReceived = floatval($input['cash_received'] ?? 0);
+        $memberId = intval($input['member_id'] ?? 0);
+        $pointsRedeemed = max(0, intval($input['points_redeemed'] ?? 0));
+        $staffUserId = !empty($_SESSION['user_id']) ? intval($_SESSION['user_id']) : null;
+        $paidBySql = $staffUserId ? $staffUserId : 'NULL';
         
-        $orderResult = query("SELECT * FROM orders WHERE id = $orderId AND shop_id = $shopId");
+        $orderResult = query("SELECT * FROM orders WHERE id = $orderId AND shop_id = $shopId LIMIT 1");
         $order = fetchOne($orderResult);
         
         if (!$order) {
             echo json_encode(['success' => false, 'error' => 'ไม่พบออเดอร์'], JSON_UNESCAPED_UNICODE);
             exit;
         }
+        if (($order['payment_status'] ?? 'unpaid') === 'paid') {
+            jsonResponse(['success' => false, 'error' => 'บิลนี้ชำระเงินเรียบร้อยแล้ว'], 400);
+        }
+
+        $effectiveMemberId = $memberId > 0 ? $memberId : intval($order['member_id'] ?? 0);
+        $grossTotal = floatval($order['total_amount']) + floatval($order['discount_amount'] ?? 0);
+        $loyaltyResult = applyMemberLoyaltyOnOrderPaid($shopId, $orderId, $effectiveMemberId, $grossTotal, $pointsRedeemed, $staffUserId);
+        $netAmount = floatval($loyaltyResult['net_amount']);
+
+        if ($paymentMethod === 'cash' && $cashReceived < $netAmount) {
+            jsonResponse(['success' => false, 'error' => 'จำนวนเงินสดที่รับมาไม่เพียงพอ'], 400);
+        }
+        if ($paymentMethod !== 'cash' && $cashReceived <= 0) {
+            $cashReceived = $netAmount;
+        }
         
-        $changeAmount = $cashReceived - floatval($order['total_amount']);
+        $changeAmount = max(0, $cashReceived - $netAmount);
         
-        query("INSERT INTO payments (shop_id, order_id, amount, payment_method, cash_received, change_amount) 
-               VALUES ($shopId, $orderId, {$order['total_amount']}, '$paymentMethod', $cashReceived, $changeAmount)");
+        query("INSERT INTO payments (shop_id, order_id, amount, payment_method, cash_received, change_amount, paid_by) 
+               VALUES ($shopId, $orderId, $netAmount, '$paymentMethod', $cashReceived, $changeAmount, $paidBySql)");
         
         query("UPDATE orders SET 
                payment_status = 'paid', 
@@ -291,6 +345,10 @@ switch ($action) {
             'success' => true, 
             'message' => 'ชำระเงินเรียบร้อย',
             'data' => [
+                'net_amount' => $netAmount,
+                'discount_amount' => floatval($loyaltyResult['discount_amount']),
+                'points_earned' => intval($loyaltyResult['points_earned']),
+                'points_redeemed' => intval($loyaltyResult['points_redeemed']),
                 'change_amount' => $changeAmount
             ]
         ], JSON_UNESCAPED_UNICODE);

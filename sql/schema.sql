@@ -21,6 +21,8 @@ CREATE TABLE IF NOT EXISTS shops (
     currency VARCHAR(10) DEFAULT '฿',
     tax_rate DECIMAL(5,2) DEFAULT 0.00,
     service_charge DECIMAL(5,2) DEFAULT 0.00,
+    member_point_rate INT NOT NULL DEFAULT 25,
+    member_redeem_value DECIMAL(6,2) NOT NULL DEFAULT 1.00,
     seo_title VARCHAR(200) DEFAULT NULL,
     seo_description VARCHAR(300) DEFAULT NULL,
     seo_keywords VARCHAR(255) DEFAULT NULL,
@@ -40,6 +42,7 @@ CREATE TABLE IF NOT EXISTS users (
     password VARCHAR(255) NOT NULL,
     full_name VARCHAR(100) NOT NULL,
     role ENUM('superadmin', 'admin', 'staff', 'kitchen') NOT NULL DEFAULT 'admin',
+    is_active TINYINT(1) NOT NULL DEFAULT 1,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (shop_id) REFERENCES shops(id) ON DELETE CASCADE
@@ -104,10 +107,14 @@ CREATE TABLE IF NOT EXISTS orders (
     shop_id INT NOT NULL DEFAULT 1,
     order_no VARCHAR(20) NOT NULL UNIQUE,
     table_id INT NOT NULL,
+    member_id INT DEFAULT NULL,
     customer_name VARCHAR(100),
     customer_phone VARCHAR(20),
     note TEXT,
+    discount_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
     total_amount DECIMAL(10,2) DEFAULT 0,
+    points_earned INT NOT NULL DEFAULT 0,
+    points_redeemed INT NOT NULL DEFAULT 0,
     status ENUM('pending', 'preparing', 'ready', 'served', 'paid', 'cancelled') DEFAULT 'pending',
     payment_status ENUM('unpaid', 'paid') DEFAULT 'unpaid',
     payment_method ENUM('cash', 'transfer', 'promptpay', 'card') DEFAULT NULL,
@@ -165,6 +172,46 @@ CREATE TABLE IF NOT EXISTS settings (
     setting_value TEXT,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY uniq_shop_setting (shop_id, setting_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ============================================
+-- ตารางสมาชิกลูกค้า & ประวัติแต้ม (CRM & Loyalty)
+-- ============================================
+CREATE TABLE IF NOT EXISTS members (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    shop_id INT NOT NULL DEFAULT 1,
+    member_code VARCHAR(30) DEFAULT NULL,
+    full_name VARCHAR(120) NOT NULL,
+    phone VARCHAR(30) NOT NULL,
+    email VARCHAR(150) DEFAULT NULL,
+    line_id VARCHAR(80) DEFAULT NULL,
+    tier ENUM('bronze', 'silver', 'gold', 'vip') NOT NULL DEFAULT 'bronze',
+    points INT NOT NULL DEFAULT 0,
+    total_spent DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    visit_count INT NOT NULL DEFAULT 0,
+    discount_percent DECIMAL(5,2) NOT NULL DEFAULT 0.00,
+    note TEXT DEFAULT NULL,
+    is_active TINYINT(1) NOT NULL DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uniq_shop_member_phone (shop_id, phone),
+    INDEX idx_shop_member_name (shop_id, full_name),
+    INDEX idx_shop_member_code (shop_id, member_code),
+    FOREIGN KEY (shop_id) REFERENCES shops(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS member_point_logs (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    shop_id INT NOT NULL DEFAULT 1,
+    member_id INT NOT NULL,
+    order_id INT DEFAULT NULL,
+    change_points INT NOT NULL,
+    reason VARCHAR(255) NOT NULL,
+    created_by INT DEFAULT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_member_log_member (shop_id, member_id),
+    FOREIGN KEY (shop_id) REFERENCES shops(id) ON DELETE CASCADE,
+    FOREIGN KEY (member_id) REFERENCES members(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ============================================

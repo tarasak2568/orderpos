@@ -155,6 +155,18 @@ function getOrderPosGuideData(bool $isAdmin = false, bool $isRetail = false, str
                     'actionLabel' => $isAdmin ? 'ไปหน้าเก็บเงิน' : 'เข้าสู่ระบบร้านค้า',
                     'actionHref' => guideActionHref('../billing.php', '/login.php', $isAdmin),
                 ],
+                [
+                    'num' => '06',
+                    'icon' => 'fa-users-gear',
+                    'title' => 'จัดการทีมงานในร้าน & สมาชิกลูกค้าประจำ (CRM)',
+                    'desc' => 'เจ้าของร้านสามารถเพิ่มบัญชีพนักงานแยกสิทธิ์ (admin / staff / kitchen) ในเมนู "จัดการทีมงาน & สิทธิ์" และสร้างทะเบียนสมาชิกลูกค้าประจำเพื่อสะสมแต้มและให้ส่วนลดอัตโนมัติในหน้าคิดเงิน',
+                    'tips' => [
+                        'พนักงานตำแหน่ง kitchen จะถูกพาไปหน้าจอครัวโดยอัตโนมัติ ไม่เข้าหน้าตั้งค่าร้านหรือการเงิน',
+                        'ค้นหาเบอร์โทรสมาชิกหรือสมัครด่วนได้ทันทีตอนเก็บเงินในหน้า POS และ Billing พร้อมหัก/สะสมแต้มอัตโนมัติ',
+                    ],
+                    'actionLabel' => $isAdmin ? 'จัดการสมาชิก / ทีมงาน' : 'เข้าสู่ระบบร้านค้า',
+                    'actionHref' => guideActionHref('members_manage.php', '/login.php', $isAdmin),
+                ],
             ],
         ],
         'retail' => [
@@ -214,6 +226,18 @@ function getOrderPosGuideData(bool $isAdmin = false, bool $isRetail = false, str
                     'actionLabel' => $isAdmin ? 'ดูประวัติบิลขาย' : 'สมัครใช้งานฟรี',
                     'actionHref' => guideActionHref('orders_manage.php', '/register.php', $isAdmin),
                 ],
+                [
+                    'num' => '05',
+                    'icon' => 'fa-address-card',
+                    'title' => 'ระบบสมาชิกร้านค้า (CRM) & ทีมงานแคชเชียร์',
+                    'desc' => 'สร้างสมาชิกลูกค้าประจำด้วยเบอร์โทร ตั้งส่วนลดระดับ Bronze/Silver/Gold/VIP และตั้งค่ากติกาสะสมแต้ม (เช่น ซื้อครบ ฿25 รับ 1 แต้ม) พร้อมเพิ่มบัญชีพนักงานแคชเชียร์แยกแต่ละคนในเมนูทีมงาน',
+                    'tips' => [
+                        'ตอนคิดเงินหน้าร้าน POS แค่พิมพ์เบอร์โทรลูกค้า ระบบจะคิดส่วนลด Tier และให้แลกแต้มเป็นส่วนลดเงินสดทันที',
+                        'เจ้าของร้านสามารถดูประวัติยอดซื้อรวมและแต้มเข้า-ออกของสมาชิกรายคนย้อนหลังได้ตลอดเวลา',
+                    ],
+                    'actionLabel' => $isAdmin ? 'ไปหน้าสมาชิกลูกค้า' : 'เข้าสู่ระบบจัดการสมาชิก',
+                    'actionHref' => guideActionHref('members_manage.php', '/login.php', $isAdmin),
+                ],
             ],
         ],
         'seo' => [
@@ -255,11 +279,18 @@ function getOrderPosGuideData(bool $isAdmin = false, bool $isRetail = false, str
                 ['label' => 'หน้าจอครัว (KDS)', 'url' => '/kitchen.php', 'role' => 'เชฟ / ในครัว'],
                 ['label' => 'หน้าเก็บเงิน (Billing & PromptPay)', 'url' => '/billing.php', 'role' => 'แคชเชียร์'],
                 ['label' => 'หลังบ้านจัดการร้าน', 'url' => '/admin/dashboard.php', 'role' => 'เจ้าของร้าน'],
+                ['label' => 'สมาชิกลูกค้า & สะสมแต้ม (CRM)', 'url' => '/admin/members_manage.php', 'role' => 'เจ้าของร้าน / พนักงาน'],
+                ['label' => 'จัดการทีมงาน & สิทธิ์พนักงาน', 'url' => '/admin/staff_manage.php', 'role' => 'เจ้าของร้าน (Admin)'],
+                ['label' => 'จัดการร้านค้าสมาชิกทั้งหมด', 'url' => '/admin/platform_manage.php', 'role' => 'Super Admin'],
             ],
             'faqs' => [
                 [
                     'q' => 'ลูกค้าต้องสมัครสมาชิกหรือโหลดแอปก่อนสั่งอาหารไหม?',
                     'a' => 'ไม่ต้องเลยครับ ลูกค้าแค่สแกน QR Code ที่โต๊ะ หรือเปิดลิงก์ร้านค้าผ่านเว็บเบราว์เซอร์บนมือถือ (Chrome/Safari/LINE) ก็เลือกเมนู หยิบใส่ตะกร้า และส่งออเดอร์ได้ทันที',
+                ],
+                [
+                    'q' => 'เพิ่มบัญชีพนักงานแคชเชียร์ หรือระบบสมาชิกสะสมแต้มได้อย่างไร?',
+                    'a' => 'เจ้าของร้าน (admin) สามารถเข้าเมนูหลังบ้าน "จัดการทีมงาน & สิทธิ์" เพื่อสร้างรหัสให้พนักงานขาย (staff) และเชฟ (kitchen) แยกกันได้ และเข้าเมนู "สมาชิกลูกค้า & แต้ม" เพื่อตั้งกติกาสะสมแต้ม ส่วนลด VIP และค้นหาเบอร์โทรสมาชิกเวลาคิดเงินได้ทันที',
                 ],
                 [
                     'q' => 'QR PromptPay ในหน้าเก็บเงินไม่ขึ้น ต้องตั้งค่าตรงไหน?',

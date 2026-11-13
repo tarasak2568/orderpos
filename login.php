@@ -12,7 +12,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($user && password_verify($password, $user['password'])) {
         $shopId = intval($user['shop_id'] ?? 1);
         $shop = getCurrentShop($shopId);
-        if (isset($shop['is_active']) && intval($shop['is_active']) === 0 && $user['role'] !== 'superadmin') {
+        if (isset($user['is_active']) && intval($user['is_active']) === 0) {
+            $error = 'บัญชีผู้ใช้งานนี้ถูกระงับการใช้งาน กรุณาติดต่อเจ้าของร้าน';
+        } elseif (isset($shop['is_active']) && intval($shop['is_active']) === 0 && $user['role'] !== 'superadmin') {
             $error = 'ร้านค้านี้ถูกระงับการใช้งานชั่วคราว กรุณาติดต่อผู้ดูแลระบบ';
         } else {
             $_SESSION['user_id'] = $user['id'];
@@ -23,7 +25,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['username'] = $user['username'];
             $_SESSION['full_name'] = $user['full_name'];
             $_SESSION['role'] = $user['role'];
-            header('Location: admin/dashboard.php');
+            header('Location: ' . ($user['role'] === 'kitchen' ? 'kitchen.php' : 'admin/dashboard.php'));
             exit;
         }
     } else {

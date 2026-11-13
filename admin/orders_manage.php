@@ -60,13 +60,18 @@ async function loadOrders() {
         let html = '';
         result.data.forEach(order => {
             const items = order.items || [];
-            const itemList = items.map(i => `${i.quantity}x ${i.name}`).join(', ');
+            const itemList = items.map(i => `${i.quantity}x ${escapeHtml(i.name || '')}`).join(', ');
+            const disc = parseFloat(order.discount_amount || 0);
+            const memberNote = order.member_name
+                ? `<div style="font-size:12px;color:#C2410C;margin-top:2px;"><i class="fas fa-address-card"></i> ${escapeHtml(order.member_name)}${parseInt(order.points_earned || 0, 10) > 0 ? ` (+${order.points_earned} แต้ม)` : ''}</div>`
+                : '';
+            const discNote = disc > 0 ? `<div style="font-size:11.5px;color:#059669;">ลดสมาชิก -${formatCurrency(disc)}</div>` : '';
             html += `<tr>
-                <td>#${order.order_no}</td>
-                <td>${order.table_name}</td>
+                <td>#${escapeHtml(order.order_no)}${memberNote}</td>
+                <td>${escapeHtml(order.table_name || '')}</td>
                 <td style="font-size:13px;">${itemList}</td>
-                <td class="text-primary">${formatCurrency(order.total_amount)}</td>
-                <td><span class="badge badge-${order.status}">${statusMap[order.status] || order.status}</span></td>
+                <td class="text-primary">${formatCurrency(order.total_amount)}${discNote}</td>
+                <td><span class="badge badge-${escapeHtml(order.status)}">${statusMap[order.status] || escapeHtml(order.status)}</span></td>
                 <td><span class="badge badge-${order.payment_status === 'paid' ? 'paid' : 'unpaid'}">${order.payment_status === 'paid' ? 'ชำระแล้ว' : 'ยังไม่ชำระ'}</span></td>
                 <td>${formatDateTime(order.created_at)}</td>
             </tr>`;

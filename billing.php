@@ -9,6 +9,10 @@ if (!isset($_SESSION['user_id'])) {
 
 require_once 'config/db.php';
 require_once 'config/seo.php';
+if (currentUserRole() === 'kitchen') {
+    header('Location: kitchen.php');
+    exit;
+}
 
 $shopId = currentShopId();
 $currentShop = getCurrentShop($shopId);
@@ -117,6 +121,7 @@ $unpaidOrders = fetchAll(query("
             </div>
             <form id="paymentForm" onsubmit="processPayment(event)">
                 <input type="hidden" id="payOrderId" value="">
+                <div id="billingMemberBox"></div>
                 <div class="form-group">
                     <label>วิธีการชำระเงิน</label>
                     <select id="payMethod" required onchange="toggleCashInput()">
@@ -142,20 +147,57 @@ $unpaidOrders = fetchAll(query("
         </div>
     </div>
 
-    <script src="assets/js/script.js"></script>
+    <script>
+        window.ORDERPOS_BILLING_CONFIG = {
+            loyalty: {
+                member_point_rate: <?= intval($currentShop['member_point_rate'] ?? 25) ?>,
+                member_redeem_value: <?= floatval($currentShop['member_redeem_value'] ?? 1.0) ?>
+            }
+        };
+    </script>
+    <script src="assets/js/script.js?v=11"></script>
     <script>
     let currentOrderId = 0;
     let currentAmount = 0;
+    let billingCashTouched = false;
+    let billingMemberPicker = null;
+
+    function updateBillingChangeDisplay() {
+        const received = parseFloat(document.getElementById('cashReceived').value) || 0;
+        const changeEl = document.getElementById('changeAmount');
+        const boxEl = document.getElementById('changeDisplay');
+        if (received >= currentAmount && (currentAmount > 0 || received > 0)) {
+            changeEl.textContent = formatCurrency(received - currentAmount);
+            boxEl.style.display = 'block';
+        } else {
+            boxEl.style.display = 'none';
+        }
+    }
 
     function openPayment(orderId, amount, tableName) {
         currentOrderId = orderId;
         currentAmount = amount;
+        billingCashTouched = false;
         document.getElementById('payOrderId').value = orderId;
-        document.getElementById('payAmount').textContent = formatCurrency(amount);
         document.getElementById('payTableName').textContent = tableName;
-        document.getElementById('cashReceived').value = '';
-        document.getElementById('changeDisplay').style.display = 'none';
+        if (!billingMemberPicker) {
+            billingMemberPicker = new MemberCheckoutPicker('billingMemberBox', {
+                config: window.ORDERPOS_BILLING_CONFIG.loyalty,
+                onTotalsChange: (totals) => {
+                    currentAmount = totals.net_amount;
+                    document.getElementById('payAmount').textContent = formatCurrency(currentAmount);
+                    if (!billingCashTouched) {
+                        document.getElementById('cashReceived').value = currentAmount;
+                    }
+                    updateBillingChangeDisplay();
+                }
+            });
+        }
+        billingMemberPicker.reset(amount);
+        document.getElementById('payAmount').textContent = formatCurrency(currentAmount);
+        document.getElementById('cashReceived').value = currentAmount;
         toggleCashInput();
+        updateBillingChangeDisplay();
         openModal('paymentModal');
     }
 
@@ -164,22 +206,18 @@ $unpaidOrders = fetchAll(query("
         const cashGroup = document.getElementById('cashReceivedGroup');
         if (method === 'cash') {
             cashGroup.style.display = 'block';
+            updateBillingChangeDisplay();
         } else {
             cashGroup.style.display = 'none';
+            document.getElementById('changeDisplay').style.display = 'none';
         }
     }
 
     // คำนวณเงินทอนอัตโนมัติ
     document.addEventListener('input', function(e) {
         if (e.target.id === 'cashReceived') {
-            const received = parseFloat(e.target.value) || 0;
-            if (received >= currentAmount) {
-                const change = received - currentAmount;
-                document.getElementById('changeAmount').textContent = formatCurrency(change);
-                document.getElementById('changeDisplay').style.display = 'block';
-            } else {
-                document.getElementById('changeDisplay').style.display = 'none';
-            }
+            billingCashTouched = true;
+            updateBillingChangeDisplay();
         }
     });
 
@@ -194,14 +232,20 @@ $unpaidOrders = fetchAll(query("
             return;
         }
 
+        const selection = billingMemberPicker ? billingMemberPicker.getSelection() : { member_id: 0, points_redeemed: 0 };
+
         try {
             const result = await API.post('orders.php?action=pay', {
                 order_id: orderId,
                 payment_method: method,
-                cash_received: cashReceived
+                cash_received: method === 'cash' ? cashReceived : currentAmount,
+                member_id: selection.member_id,
+                points_redeemed: selection.points_redeemed
             });
 
-            showToast('ชำระเงินเรียบร้อย เงินทอน ' + formatCurrency(result.data.change_amount), 'success');
+            const pts = parseInt(result.data?.points_earned || 0, 10);
+            const ptsMsg = pts > 0 ? ` (+${pts} แต้ม)` : '';
+            showToast('ชำระเงินเรียบร้อย เงินทอน ' + formatCurrency(result.data.change_amount) + ptsMsg, 'success');
             closeModal('paymentModal');
             setTimeout(() => location.reload(), 1000);
         } catch (error) {

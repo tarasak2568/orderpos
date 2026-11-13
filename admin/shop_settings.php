@@ -9,6 +9,7 @@ if (!isset($_SESSION['user_id'])) {
 
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/seo.php';
+requireShopRoles(['superadmin', 'admin']);
 
 $shopId = intval($_SESSION['shop_id'] ?? 1);
 $successMsg = isset($_GET['saved']) ? 'บันทึกข้อมูลร้านค้าและการตั้งค่า Dynamic SEO เรียบร้อยแล้ว' : '';

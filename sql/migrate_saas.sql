@@ -61,3 +61,50 @@ ALTER TABLE tables ADD UNIQUE INDEX IF NOT EXISTS uniq_shop_table (shop_id, tabl
 -- 5. ปรับ Unique Index ของ settings ให้แยกตามร้านค้า (shop_id, setting_key)
 ALTER TABLE settings DROP INDEX IF EXISTS setting_key;
 ALTER TABLE settings ADD UNIQUE INDEX IF NOT EXISTS uniq_shop_setting (shop_id, setting_key);
+
+-- 6. ระบบจัดการพนักงาน สมาชิกลูกค้า (CRM) และ Super Admin
+ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active TINYINT(1) NOT NULL DEFAULT 1 AFTER role;
+ALTER TABLE shops ADD COLUMN IF NOT EXISTS member_point_rate INT NOT NULL DEFAULT 25 AFTER service_charge;
+ALTER TABLE shops ADD COLUMN IF NOT EXISTS member_redeem_value DECIMAL(6,2) NOT NULL DEFAULT 1.00 AFTER member_point_rate;
+
+CREATE TABLE IF NOT EXISTS members (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    shop_id INT NOT NULL DEFAULT 1,
+    member_code VARCHAR(30) DEFAULT NULL,
+    full_name VARCHAR(120) NOT NULL,
+    phone VARCHAR(30) NOT NULL,
+    email VARCHAR(150) DEFAULT NULL,
+    line_id VARCHAR(80) DEFAULT NULL,
+    tier ENUM('bronze', 'silver', 'gold', 'vip') NOT NULL DEFAULT 'bronze',
+    points INT NOT NULL DEFAULT 0,
+    total_spent DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+    visit_count INT NOT NULL DEFAULT 0,
+    discount_percent DECIMAL(5,2) NOT NULL DEFAULT 0.00,
+    note TEXT DEFAULT NULL,
+    is_active TINYINT(1) NOT NULL DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uniq_shop_member_phone (shop_id, phone),
+    INDEX idx_shop_member_name (shop_id, full_name),
+    INDEX idx_shop_member_code (shop_id, member_code),
+    FOREIGN KEY (shop_id) REFERENCES shops(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS member_point_logs (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    shop_id INT NOT NULL DEFAULT 1,
+    member_id INT NOT NULL,
+    order_id INT DEFAULT NULL,
+    change_points INT NOT NULL,
+    reason VARCHAR(255) NOT NULL,
+    created_by INT DEFAULT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_member_log_member (shop_id, member_id),
+    FOREIGN KEY (shop_id) REFERENCES shops(id) ON DELETE CASCADE,
+    FOREIGN KEY (member_id) REFERENCES members(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS member_id INT DEFAULT NULL AFTER table_id;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS discount_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00 AFTER note;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS points_earned INT NOT NULL DEFAULT 0 AFTER total_amount;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS points_redeemed INT NOT NULL DEFAULT 0 AFTER points_earned;

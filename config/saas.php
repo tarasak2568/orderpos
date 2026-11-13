@@ -11,7 +11,7 @@ if (session_status() === PHP_SESSION_NONE) {
 if (!function_exists('ensureSaasSchema')) {
     function ensureSaasSchema() {
         global $conn;
-        if (!$conn || !empty($_SESSION['_saas_retail_schema_v2'])) {
+        if (!$conn || !empty($_SESSION['_saas_members_schema_v3'])) {
             return;
         }
 
@@ -78,8 +78,75 @@ if (!function_exists('ensureSaasSchema')) {
             $conn->query("ALTER TABLE `menu_items` ADD COLUMN `stock_qty` INT DEFAULT NULL AFTER `price`");
         }
 
-        // 5. ปรับ role ใน users
+        // 5. ปรับ role ใน users และเพิ่มสถานะเปิด-ปิดบัญชีพนักงาน
         $conn->query("ALTER TABLE `users` MODIFY COLUMN `role` ENUM('superadmin', 'admin', 'staff', 'kitchen') NOT NULL DEFAULT 'admin'");
+        $userActiveCheck = $conn->query("SHOW COLUMNS FROM `users` LIKE 'is_active'");
+        if ($userActiveCheck && $userActiveCheck->num_rows === 0) {
+            $conn->query("ALTER TABLE `users` ADD COLUMN `is_active` TINYINT(1) NOT NULL DEFAULT 1 AFTER `role`");
+        }
+
+        // 5.1 เพิ่มตั้งค่าสะสมแต้มสมาชิกใน shops
+        $pointRateCheck = $conn->query("SHOW COLUMNS FROM `shops` LIKE 'member_point_rate'");
+        if ($pointRateCheck && $pointRateCheck->num_rows === 0) {
+            $conn->query("ALTER TABLE `shops` ADD COLUMN `member_point_rate` INT NOT NULL DEFAULT 25 AFTER `service_charge`");
+        }
+        $redeemValCheck = $conn->query("SHOW COLUMNS FROM `shops` LIKE 'member_redeem_value'");
+        if ($redeemValCheck && $redeemValCheck->num_rows === 0) {
+            $conn->query("ALTER TABLE `shops` ADD COLUMN `member_redeem_value` DECIMAL(6,2) NOT NULL DEFAULT 1.00 AFTER `member_point_rate`");
+        }
+
+        // 5.2 สร้างตารางสมาชิกลูกค้า (Customer CRM & Loyalty Points)
+        $conn->query("CREATE TABLE IF NOT EXISTS members (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            shop_id INT NOT NULL DEFAULT 1,
+            member_code VARCHAR(30) DEFAULT NULL,
+            full_name VARCHAR(120) NOT NULL,
+            phone VARCHAR(30) NOT NULL,
+            email VARCHAR(150) DEFAULT NULL,
+            line_id VARCHAR(80) DEFAULT NULL,
+            tier ENUM('bronze', 'silver', 'gold', 'vip') NOT NULL DEFAULT 'bronze',
+            points INT NOT NULL DEFAULT 0,
+            total_spent DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+            visit_count INT NOT NULL DEFAULT 0,
+            discount_percent DECIMAL(5,2) NOT NULL DEFAULT 0.00,
+            note TEXT DEFAULT NULL,
+            is_active TINYINT(1) NOT NULL DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY uniq_shop_member_phone (shop_id, phone),
+            INDEX idx_shop_member_name (shop_id, full_name),
+            INDEX idx_shop_member_code (shop_id, member_code),
+            FOREIGN KEY (shop_id) REFERENCES shops(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        // 5.3 สร้างตารางประวัติการเปลี่ยนแปลงแต้มสมาชิก
+        $conn->query("CREATE TABLE IF NOT EXISTS member_point_logs (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            shop_id INT NOT NULL DEFAULT 1,
+            member_id INT NOT NULL,
+            order_id INT DEFAULT NULL,
+            change_points INT NOT NULL,
+            reason VARCHAR(255) NOT NULL,
+            created_by INT DEFAULT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_member_log_member (shop_id, member_id),
+            FOREIGN KEY (shop_id) REFERENCES shops(id) ON DELETE CASCADE,
+            FOREIGN KEY (member_id) REFERENCES members(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        // 5.4 เพิ่มคอลัมน์ผูกสมาชิกและแต้มในตาราง orders
+        $orderLoyaltyCols = [
+            'member_id' => "ALTER TABLE `orders` ADD COLUMN `member_id` INT DEFAULT NULL AFTER `table_id`",
+            'discount_amount' => "ALTER TABLE `orders` ADD COLUMN `discount_amount` DECIMAL(10,2) NOT NULL DEFAULT 0.00 AFTER `note`",
+            'points_earned' => "ALTER TABLE `orders` ADD COLUMN `points_earned` INT NOT NULL DEFAULT 0 AFTER `total_amount`",
+            'points_redeemed' => "ALTER TABLE `orders` ADD COLUMN `points_redeemed` INT NOT NULL DEFAULT 0 AFTER `points_earned`",
+        ];
+        foreach ($orderLoyaltyCols as $colName => $alterSql) {
+            $colChk = $conn->query("SHOW COLUMNS FROM `orders` LIKE '$colName'");
+            if ($colChk && $colChk->num_rows === 0) {
+                $conn->query($alterSql);
+            }
+        }
 
         // 6. ปรับ Unique Index ของ tables ให้แยกตามร้าน (shop_id, table_code)
         $idxCheck = $conn->query("SHOW INDEX FROM `tables` WHERE Key_name = 'table_code'");
@@ -91,7 +158,7 @@ if (!function_exists('ensureSaasSchema')) {
             $conn->query("ALTER TABLE `tables` ADD UNIQUE INDEX `uniq_shop_table` (`shop_id`, `table_code`)");
         }
 
-        $_SESSION['_saas_retail_schema_v2'] = true;
+        $_SESSION['_saas_members_schema_v3'] = true;
     }
 }
 
@@ -305,6 +372,173 @@ if (!function_exists('seedNewShopDefaults')) {
                        VALUES ($sid, '$code', '$tName', $cap, 'available')");
             }
         }
+    }
+}
+
+if (!function_exists('currentUserRole')) {
+    function currentUserRole(): string {
+        return (string)($_SESSION['role'] ?? 'staff');
+    }
+}
+
+if (!function_exists('hasAnyRole')) {
+    function hasAnyRole(array $allowedRoles): bool {
+        if (empty($_SESSION['user_id'])) {
+            return false;
+        }
+        return in_array(currentUserRole(), $allowedRoles, true);
+    }
+}
+
+if (!function_exists('requireAuthApi')) {
+    function requireAuthApi(array $allowedRoles = []): void {
+        if (empty($_SESSION['user_id'])) {
+            jsonResponse(['success' => false, 'error' => 'กรุณาเข้าสู่ระบบก่อนใช้งาน'], 401);
+        }
+        if (!empty($allowedRoles) && !in_array(currentUserRole(), $allowedRoles, true)) {
+            jsonResponse(['success' => false, 'error' => 'บัญชีของคุณไม่มีสิทธิ์ดำเนินการนี้'], 403);
+        }
+    }
+}
+
+if (!function_exists('requireShopRoles')) {
+    function requireShopRoles(array $allowedRoles, string $fallbackUrl = 'dashboard.php'): void {
+        if (empty($_SESSION['user_id'])) {
+            header('Location: ../login.php');
+            exit;
+        }
+        $role = currentUserRole();
+        if (!in_array($role, $allowedRoles, true)) {
+            $target = ($role === 'kitchen') ? '../kitchen.php' : $fallbackUrl;
+            header('Location: ' . $target);
+            exit;
+        }
+    }
+}
+
+if (!function_exists('getRoleDisplayInfo')) {
+    function getRoleDisplayInfo(string $role): array {
+        $map = [
+            'superadmin' => ['label' => 'Super Admin (เจ้าของระบบ)', 'bg' => '#EDE9FE', 'color' => '#6D28D9', 'desc' => 'จัดการร้านค้าทั้งหมดบนแพลตฟอร์มและเข้าช่วยจัดการทุกร้านได้'],
+            'admin'      => ['label' => 'เจ้าของร้าน / แอดมิน', 'bg' => '#FFF3ED', 'color' => '#C2410C', 'desc' => 'เข้าถึงทุกเมนูในร้าน จัดการพนักงาน สมาชิก เมนู โต๊ะ และ SEO'],
+            'staff'      => ['label' => 'พนักงานหน้าร้าน / แคชเชียร์', 'bg' => '#E0F2FE', 'color' => '#0369A1', 'desc' => 'เปิด POS รับออเดอร์ เก็บเงิน ดูออเดอร์ และค้นหา/สมัครสมาชิกลูกค้า'],
+            'kitchen'    => ['label' => 'พนักงานครัว (KDS)', 'bg' => '#ECFDF5', 'color' => '#047857', 'desc' => 'เข้าดูหน้าจอครัว (Kitchen Display) และอัปเดตสถานะปรุงอาหาร'],
+        ];
+        return $map[$role] ?? ['label' => $role, 'bg' => '#F1F5F9', 'color' => '#475569', 'desc' => ''];
+    }
+}
+
+if (!function_exists('getMemberTierCatalog')) {
+    function getMemberTierCatalog(): array {
+        return [
+            'bronze' => ['label' => 'Bronze', 'bg' => '#FEF3C7', 'color' => '#92400E', 'default_discount' => 0.0],
+            'silver' => ['label' => 'Silver', 'bg' => '#F1F5F9', 'color' => '#334155', 'default_discount' => 3.0],
+            'gold'   => ['label' => 'Gold',   'bg' => '#FEF08A', 'color' => '#854D0E', 'default_discount' => 5.0],
+            'vip'    => ['label' => 'VIP',    'bg' => '#FCE7F3', 'color' => '#9D174D', 'default_discount' => 10.0],
+        ];
+    }
+}
+
+if (!function_exists('calculateOrderLoyaltyTotals')) {
+    function calculateOrderLoyaltyTotals(float $grossAmount, ?array $member, array $shop, int $requestedPoints = 0): array {
+        $gross = max(0.0, round($grossAmount, 2));
+        $pointRate = max(0, intval($shop['member_point_rate'] ?? 25));
+        $redeemValue = max(0.0, floatval($shop['member_redeem_value'] ?? 1.0));
+
+        if (!$member || intval($member['is_active'] ?? 1) !== 1) {
+            return [
+                'gross_amount' => $gross,
+                'tier_discount' => 0.0,
+                'points_redeemed' => 0,
+                'point_discount' => 0.0,
+                'discount_amount' => 0.0,
+                'net_amount' => $gross,
+                'points_earned' => 0,
+            ];
+        }
+
+        $discountPct = min(100.0, max(0.0, floatval($member['discount_percent'] ?? 0)));
+        $tierDiscount = round($gross * ($discountPct / 100.0), 2);
+        $afterTier = max(0.0, round($gross - $tierDiscount, 2));
+
+        $availablePoints = max(0, intval($member['points'] ?? 0));
+        $wantedPoints = max(0, $requestedPoints);
+        $usedPoints = 0;
+        $pointDiscount = 0.0;
+
+        if ($redeemValue > 0 && $availablePoints > 0 && $wantedPoints > 0 && $afterTier > 0) {
+            $maxRedeemableByTotal = intval(floor($afterTier / $redeemValue));
+            $usedPoints = min($wantedPoints, $availablePoints, $maxRedeemableByTotal);
+            $pointDiscount = round($usedPoints * $redeemValue, 2);
+        }
+
+        $totalDiscount = min($gross, round($tierDiscount + $pointDiscount, 2));
+        $netAmount = max(0.0, round($gross - $totalDiscount, 2));
+        $pointsEarned = ($pointRate > 0) ? intval(floor($netAmount / $pointRate)) : 0;
+
+        return [
+            'gross_amount' => $gross,
+            'tier_discount' => $tierDiscount,
+            'points_redeemed' => $usedPoints,
+            'point_discount' => $pointDiscount,
+            'discount_amount' => $totalDiscount,
+            'net_amount' => $netAmount,
+            'points_earned' => $pointsEarned,
+        ];
+    }
+}
+
+if (!function_exists('applyMemberLoyaltyOnOrderPaid')) {
+    function applyMemberLoyaltyOnOrderPaid(int $shopId, int $orderId, int $memberId, float $grossAmount, int $requestedPoints = 0, ?int $staffUserId = null): array {
+        $shop = getCurrentShop($shopId);
+        $member = null;
+        if ($memberId > 0) {
+            $member = fetchOne(query("SELECT * FROM members WHERE id = $memberId AND shop_id = $shopId AND is_active = 1 LIMIT 1"));
+        }
+
+        $calc = calculateOrderLoyaltyTotals($grossAmount, $member, $shop, $requestedPoints);
+        if (!$member) {
+            return array_merge($calc, ['member_id' => null, 'member' => null]);
+        }
+
+        $mid = intval($member['id']);
+        $net = floatval($calc['net_amount']);
+        $discountAmt = floatval($calc['discount_amount']);
+        $earned = intval($calc['points_earned']);
+        $redeemed = intval($calc['points_redeemed']);
+        $netPointDelta = $earned - $redeemed;
+        $escCustName = escape($member['full_name']);
+        $escCustPhone = escape($member['phone']);
+
+        query("UPDATE orders
+               SET member_id = $mid,
+                   customer_name = '$escCustName',
+                   customer_phone = '$escCustPhone',
+                   discount_amount = $discountAmt,
+                   total_amount = $net,
+                   points_earned = $earned,
+                   points_redeemed = $redeemed
+               WHERE id = $orderId AND shop_id = $shopId");
+
+        query("UPDATE members
+               SET points = GREATEST(0, points + ($netPointDelta)),
+                   total_spent = total_spent + $net,
+                   visit_count = visit_count + 1
+               WHERE id = $mid AND shop_id = $shopId");
+
+        $bySql = $staffUserId ? intval($staffUserId) : 'NULL';
+        if ($redeemed > 0) {
+            $reasonRedeem = escape("แลกแต้มส่วนลดบิล #$orderId (-{$calc['point_discount']} บาท)");
+            query("INSERT INTO member_point_logs (shop_id, member_id, order_id, change_points, reason, created_by)
+                   VALUES ($shopId, $mid, $orderId, -$redeemed, '$reasonRedeem', $bySql)");
+        }
+        if ($earned > 0) {
+            $reasonEarn = escape("รับแต้มสะสมจากบิล #$orderId (ยอดสุทธิ ฿" . number_format($net, 2, '.', '') . ")");
+            query("INSERT INTO member_point_logs (shop_id, member_id, order_id, change_points, reason, created_by)
+                   VALUES ($shopId, $mid, $orderId, $earned, '$reasonEarn', $bySql)");
+        }
+
+        return array_merge($calc, ['member_id' => $mid, 'member' => $member]);
     }
 }
 ?>

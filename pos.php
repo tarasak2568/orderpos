@@ -8,6 +8,10 @@ if (!isset($_SESSION['user_id'])) {
 }
 require_once 'config/db.php';
 require_once 'config/seo.php';
+if (currentUserRole() === 'kitchen') {
+    header('Location: kitchen.php');
+    exit;
+}
 $currentShop = getCurrentShop($_SESSION['shop_id'] ?? 1);
 $isRetail = (($currentShop['shop_type'] ?? 'restaurant') === 'retail');
 ?>
@@ -111,6 +115,7 @@ $isRetail = (($currentShop['shop_type'] ?? 'restaurant') === 'retail');
                 <p style="color: var(--gray); margin: 0;">ยอดรวมที่ต้องชำระ</p>
             </div>
             <form id="posCheckoutForm" onsubmit="staffPos.confirmInstantCheckout(event)">
+                <div id="posMemberBox"></div>
                 <div class="form-group">
                     <label>วิธีการชำระเงิน</label>
                     <select id="posPayMethod" required onchange="staffPos.toggleCashInput()">
@@ -122,7 +127,7 @@ $isRetail = (($currentShop['shop_type'] ?? 'restaurant') === 'retail');
                 </div>
                 <div class="form-group" id="posCashGroup">
                     <label>รับเงินสดมา (บาท)</label>
-                    <input type="number" id="posCashReceived" step="0.25" placeholder="ระบุจำนวนเงินที่รับจากลูกค้า" oninput="staffPos.updateChangeDisplay()">
+                    <input type="number" id="posCashReceived" step="0.25" placeholder="ระบุจำนวนเงินที่รับจากลูกค้า" oninput="staffPos._cashTouched = true; staffPos.updateChangeDisplay()">
                     <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
                         <button type="button" class="btn btn-sm btn-outline" onclick="staffPos.setQuickCash('exact')">พอดี</button>
                         <button type="button" class="btn btn-sm btn-outline" onclick="staffPos.setQuickCash(20)">฿20</button>
@@ -146,9 +151,13 @@ $isRetail = (($currentShop['shop_type'] ?? 'restaurant') === 'retail');
     
     <script>
         window.ORDERPOS_POS_CONFIG = {
-            shopType: <?= json_encode($currentShop['shop_type'] ?? 'restaurant') ?>
+            shopType: <?= json_encode($currentShop['shop_type'] ?? 'restaurant') ?>,
+            loyalty: {
+                member_point_rate: <?= intval($currentShop['member_point_rate'] ?? 25) ?>,
+                member_redeem_value: <?= floatval($currentShop['member_redeem_value'] ?? 1.0) ?>
+            }
         };
     </script>
-    <script src="assets/js/script.js?v=9"></script>
+    <script src="assets/js/script.js?v=11"></script>
 </body>
 </html>
