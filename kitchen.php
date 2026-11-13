@@ -15,6 +15,8 @@ $currentShop = getCurrentShop($_SESSION['shop_id'] ?? 1);
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=2">
+    <link rel="alternate icon" href="/favicon.ico?v=2">
 <?= renderDynamicSeoTags([
     'type' => 'noindex',
     'title' => 'หน้าจอครัว - ' . $currentShop['shop_name']

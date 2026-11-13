@@ -36,7 +36,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=2">
+    <link rel="alternate icon" href="/favicon.ico?v=2">
 <?= renderDynamicSeoTags([
     'type' => 'platform',
     'title' => 'เข้าสู่ระบบ OrderPOS - ระบบ POS ร้านอาหาร คาเฟ่ & ร้านของชำออนไลน์ฟรี',
