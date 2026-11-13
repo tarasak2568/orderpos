@@ -367,16 +367,20 @@ class CustomerMenu {
 }
 
 // ============================================
-// Staff POS Page
+// Staff POS Page (รองรับทั้งร้านอาหารและร้านของชำ/ค้าปลีก)
 // ============================================
 class StaffPOS {
   constructor() {
     this.cart = [];
     this.currentCategory = "all";
+    this.searchQuery = "";
     this.menuItems = [];
     this.categories = [];
     this.tables = [];
-    this.selectedTable = "";
+    this.shopType =
+      window.ORDERPOS_POS_CONFIG?.shopType ||
+      document.querySelector(".pos-layout")?.dataset?.shopType ||
+      "restaurant";
 
     this.init();
   }
@@ -424,14 +428,36 @@ class StaffPOS {
     if (this.currentCategory !== "all") {
       items = items.filter((item) => item.category_id == this.currentCategory);
     }
+    if (this.searchQuery !== "") {
+      const q = this.searchQuery.toLowerCase();
+      items = items.filter(
+        (item) =>
+          (item.name && item.name.toLowerCase().includes(q)) ||
+          (item.sku && item.sku.toLowerCase().includes(q)),
+      );
+    }
+
+    if (items.length === 0) {
+      container.innerHTML =
+        '<div class="text-center text-gray" style="grid-column:1/-1;padding:40px;">ไม่พบรายการที่ค้นหา</div>';
+      return;
+    }
 
     let html = "";
     items.forEach((item) => {
+      const hasStockLimit =
+        item.stock_qty !== null && item.stock_qty !== undefined;
+      const outOfStock = hasStockLimit && item.stock_qty <= 0;
+      const stockText = hasStockLimit
+        ? `<div style="font-size:11px;color:${outOfStock ? "#DC2626" : "#64748B"};margin-top:2px;">${outOfStock ? "สินค้าหมด" : `คงเหลือ ${item.stock_qty}`}</div>`
+        : "";
+
       html += `
-                <div class="pos-item" onclick="staffPos.addToCart(${item.id})">
-                    <div class="item-icon"><i class="fas fa-utensils"></i></div>
+                <div class="pos-item" style="${outOfStock ? "opacity:0.5;cursor:not-allowed;" : ""}" onclick="staffPos.addToCart(${item.id})">
+                    <div class="item-icon"><i class="fas ${this.shopType === "retail" ? "fa-box-open" : "fa-utensils"}"></i></div>
                     <div class="item-name">${item.name}</div>
                     <div class="item-price">${formatCurrency(item.price)}</div>
+                    ${stockText}
                 </div>
             `;
     });
@@ -442,8 +468,13 @@ class StaffPOS {
     const select = document.querySelector(".pos-cart-header select");
     if (!select) return;
 
-    let html = '<option value="">เลือกโต๊ะ</option>';
+    const isRetail = this.shopType === "retail";
+    let html = isRetail
+      ? '<option value="WALKIN">🛒 ขายหน้าร้าน (Walk-in)</option>'
+      : '<option value="WALKIN">🛍️ ขายหน้าร้าน / สั่งกลับบ้าน (Walk-in)</option>';
+
     this.tables.forEach((table) => {
+      if (table.table_code === "WALKIN" && isRetail) return;
       html += `<option value="${table.table_code}">${table.table_name} (${table.status === "available" ? "ว่าง" : "ไม่ว่าง"})</option>`;
     });
     select.innerHTML = html;
@@ -453,7 +484,16 @@ class StaffPOS {
     const item = this.menuItems.find((i) => i.id === itemId);
     if (!item) return;
 
+    const hasStockLimit =
+      item.stock_qty !== null && item.stock_qty !== undefined;
     const existing = this.cart.find((c) => c.id === itemId);
+    const currentQty = existing ? existing.qty : 0;
+
+    if (hasStockLimit && currentQty + 1 > item.stock_qty) {
+      showToast(`สต๊อก "${item.name}" เหลือเพียง ${item.stock_qty} ชิ้น`, "warning");
+      return;
+    }
+
     if (existing) {
       existing.qty++;
     } else {
@@ -480,6 +520,10 @@ class StaffPOS {
     this.renderCart();
   }
 
+  getTotalPrice() {
+    return this.cart.reduce((sum, item) => sum + item.price * item.qty, 0);
+  }
+
   renderCart() {
     const itemsEl = document.querySelector(".pos-cart-items");
     const totalEl = document.querySelector(
@@ -487,10 +531,7 @@ class StaffPOS {
     );
     const countEl = document.querySelector(".pos-cart-footer .total-row small");
 
-    const totalPrice = this.cart.reduce(
-      (sum, item) => sum + item.price * item.qty,
-      0,
-    );
+    const totalPrice = this.getTotalPrice();
     const totalQty = this.cart.reduce((sum, item) => sum + item.qty, 0);
 
     if (totalEl) totalEl.textContent = formatCurrency(totalPrice);
@@ -524,20 +565,15 @@ class StaffPOS {
 
   async submitOrder() {
     const tableSelect = document.querySelector(".pos-cart-header select");
-    const tableId = tableSelect?.value;
-
-    if (!tableId) {
-      showToast("กรุณาเลือกโต๊ะ", "warning");
-      return;
-    }
+    const tableId = tableSelect?.value || "WALKIN";
 
     if (this.cart.length === 0) {
-      showToast("กรุณาเลือกรายการอาหาร", "warning");
+      showToast("กรุณาเลือกรายการก่อน", "warning");
       return;
     }
 
     try {
-      const result = await API.post("orders.php?action=create", {
+      await API.post("orders.php?action=create", {
         table_id: tableId,
         items: this.cart.map((item) => ({
           menu_item_id: item.id,
@@ -546,11 +582,109 @@ class StaffPOS {
         })),
       });
 
-      showToast("สร้างออเดอร์เรียบร้อย", "success");
+      showToast("ส่งออเดอร์เข้าครัวเรียบร้อย", "success");
       this.cart = [];
       this.renderCart();
+      await this.loadData();
+      this.renderMenu();
     } catch (error) {
       showToast("ไม่สามารถสร้างออเดอร์ได้", "error");
+    }
+  }
+
+  openInstantCheckout() {
+    if (this.cart.length === 0) {
+      showToast("กรุณาเลือกสินค้าเข้าตะกร้าก่อนคิดเงิน", "warning");
+      return;
+    }
+    const total = this.getTotalPrice();
+    document.getElementById("posPayTotalDisplay").textContent =
+      formatCurrency(total);
+    document.getElementById("posPayMethod").value = "cash";
+    document.getElementById("posCashReceived").value = total;
+    this.toggleCashInput();
+    this.updateChangeDisplay();
+    openModal("posCheckoutModal");
+  }
+
+  toggleCashInput() {
+    const method = document.getElementById("posPayMethod")?.value || "cash";
+    const cashGroup = document.getElementById("posCashGroup");
+    const changeBox = document.getElementById("posChangeBox");
+    if (method === "cash") {
+      if (cashGroup) cashGroup.style.display = "block";
+      this.updateChangeDisplay();
+    } else {
+      if (cashGroup) cashGroup.style.display = "none";
+      if (changeBox) changeBox.style.display = "none";
+    }
+  }
+
+  setQuickCash(val) {
+    const total = this.getTotalPrice();
+    const input = document.getElementById("posCashReceived");
+    if (!input) return;
+    input.value = val === "exact" ? total : val;
+    this.updateChangeDisplay();
+  }
+
+  updateChangeDisplay() {
+    const total = this.getTotalPrice();
+    const received =
+      parseFloat(document.getElementById("posCashReceived")?.value) || 0;
+    const changeBox = document.getElementById("posChangeBox");
+    const changeEl = document.getElementById("posChangeAmount");
+    if (!changeBox || !changeEl) return;
+
+    if (received >= total && total > 0) {
+      changeEl.textContent = formatCurrency(received - total);
+      changeBox.style.display = "block";
+    } else {
+      changeBox.style.display = "none";
+    }
+  }
+
+  async confirmInstantCheckout(event) {
+    event.preventDefault();
+    const total = this.getTotalPrice();
+    const method = document.getElementById("posPayMethod")?.value || "cash";
+    const cashReceived =
+      parseFloat(document.getElementById("posCashReceived")?.value) || 0;
+    const tableSelect = document.querySelector(".pos-cart-header select");
+    const tableId = tableSelect?.value || "WALKIN";
+
+    if (method === "cash" && cashReceived < total) {
+      showToast("จำนวนเงินสดที่รับมาไม่เพียงพอ", "warning");
+      return;
+    }
+
+    try {
+      const result = await API.post("orders.php?action=create", {
+        table_id: tableId,
+        instant_pay: true,
+        payment_method: method,
+        cash_received: method === "cash" ? cashReceived : total,
+        items: this.cart.map((item) => ({
+          menu_item_id: item.id,
+          quantity: item.qty,
+          price: item.price,
+        })),
+      });
+
+      const change = result.data?.change_amount || 0;
+      showToast(
+        method === "cash"
+          ? `รับชำระเรียบร้อย! เงินทอน ${formatCurrency(change)}`
+          : "รับชำระเงินเรียบร้อย!",
+        "success",
+      );
+      closeModal("posCheckoutModal");
+      this.cart = [];
+      this.renderCart();
+      await this.loadData();
+      this.renderMenu();
+    } catch (error) {
+      showToast("ไม่สามารถบันทึกการชำระเงินได้", "error");
     }
   }
 
@@ -568,6 +702,33 @@ class StaffPOS {
         }
       }
     });
+
+    const searchInput = document.getElementById("posSearchInput");
+    if (searchInput) {
+      searchInput.addEventListener("input", (e) => {
+        this.searchQuery = e.target.value.trim();
+        this.renderMenu();
+      });
+
+      // รองรับเครื่องยิงบาร์โค้ด (สแกนแล้วกด Enter หยิบใส่ตะกร้าทันที)
+      searchInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          const code = searchInput.value.trim();
+          if (!code) return;
+          const exactSku = this.menuItems.find(
+            (i) => i.sku && i.sku.toLowerCase() === code.toLowerCase(),
+          );
+          if (exactSku) {
+            this.addToCart(exactSku.id);
+            searchInput.value = "";
+            this.searchQuery = "";
+            this.renderMenu();
+            showToast(`เพิ่ม "${exactSku.name}" ลงตะกร้าแล้ว`, "success");
+          }
+        }
+      });
+    }
   }
 }
 

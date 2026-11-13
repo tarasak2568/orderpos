@@ -17,7 +17,7 @@ switch ($action) {
         
         $input = json_decode(file_get_contents('php://input'), true);
         
-        if (!$input || !isset($input['table_id'])) {
+        if (!$input) {
             echo json_encode(['success' => false, 'error' => 'ข้อมูลไม่ครบถ้วน'], JSON_UNESCAPED_UNICODE);
             exit;
         }
@@ -26,12 +26,19 @@ switch ($action) {
             $shopId = intval($input['shop_id']);
         }
         
-        $table_code = escape($input['table_id']);
+        $rawTableCode = trim($input['table_id'] ?? '');
+        if ($rawTableCode === '') {
+            $rawTableCode = 'WALKIN';
+        }
+        $table_code = escape($rawTableCode);
         $note = escape($input['note'] ?? '');
         $items = $input['items'] ?? [];
+        $instantPay = !empty($input['instant_pay']);
+        $paymentMethod = escape($input['payment_method'] ?? 'cash');
+        $cashReceived = floatval($input['cash_received'] ?? 0);
         
         if (empty($items)) {
-            echo json_encode(['success' => false, 'error' => 'ไม่มีรายการอาหาร'], JSON_UNESCAPED_UNICODE);
+            echo json_encode(['success' => false, 'error' => 'ไม่มีรายการสินค้า'], JSON_UNESCAPED_UNICODE);
             exit;
         }
         
@@ -40,14 +47,19 @@ switch ($action) {
         $table = fetchOne($tableResult);
         
         if (!$table) {
-            // ถ้ายังไม่มีรหัสโต๊ะนี้ในร้าน ให้หยิบโต๊ะแรกของร้านหรือสร้างให้อัตโนมัติ
-            $firstTable = fetchOne(query("SELECT id FROM tables WHERE shop_id = $shopId ORDER BY id ASC LIMIT 1"));
-            if ($firstTable) {
-                $table = $firstTable;
-            } else {
-                query("INSERT INTO tables (shop_id, table_code, table_name, capacity, status) VALUES ($shopId, '$table_code', 'โต๊ะ $table_code', 4, 'occupied')");
+            if ($rawTableCode === 'WALKIN') {
+                query("INSERT INTO tables (shop_id, table_code, table_name, capacity, status) VALUES ($shopId, 'WALKIN', 'ขายหน้าร้าน (Walk-in)', 1, 'available')");
                 global $conn;
                 $table = ['id' => $conn->insert_id];
+            } else {
+                $firstTable = fetchOne(query("SELECT id FROM tables WHERE shop_id = $shopId ORDER BY id ASC LIMIT 1"));
+                if ($firstTable) {
+                    $table = $firstTable;
+                } else {
+                    query("INSERT INTO tables (shop_id, table_code, table_name, capacity, status) VALUES ($shopId, '$table_code', 'จุดขาย $table_code', 4, 'available')");
+                    global $conn;
+                    $table = ['id' => $conn->insert_id];
+                }
             }
         }
         
@@ -62,9 +74,14 @@ switch ($action) {
             $totalAmount += floatval($item['price']) * intval($item['quantity']);
         }
         
+        $initStatus = $instantPay ? 'paid' : 'pending';
+        $initPayStatus = $instantPay ? 'paid' : 'unpaid';
+        $payMethodSql = $instantPay ? "'$paymentMethod'" : "NULL";
+        $paidAtSql = $instantPay ? "NOW()" : "NULL";
+
         // สร้างออเดอร์ผูกกับ shop_id
-        $orderResult = query("INSERT INTO orders (shop_id, order_no, table_id, note, total_amount, status, payment_status) 
-               VALUES ($shopId, '$orderNo', $tableId, '$note', $totalAmount, 'pending', 'unpaid')");
+        $orderResult = query("INSERT INTO orders (shop_id, order_no, table_id, note, total_amount, status, payment_status, payment_method, paid_at) 
+               VALUES ($shopId, '$orderNo', $tableId, '$note', $totalAmount, '$initStatus', '$initPayStatus', $payMethodSql, $paidAtSql)");
         
         if (!$orderResult) {
             global $conn;
@@ -75,26 +92,45 @@ switch ($action) {
         global $conn;
         $orderId = $conn->insert_id;
         
-        // เพิ่มรายการในออเดอร์
+        // เพิ่มรายการในออเดอร์ + ตัดสต๊อกสินค้าอัตโนมัติ (กรณีระบุ stock_qty)
         foreach ($items as $item) {
             $menuItemId = intval($item['menu_item_id']);
             $quantity = intval($item['quantity']);
             $price = floatval($item['price']);
             $itemNote = escape($item['note'] ?? '');
+            $itemStatus = $instantPay ? 'served' : 'pending';
             
-            query("INSERT INTO order_items (order_id, menu_item_id, quantity, price, note) 
-                   VALUES ($orderId, $menuItemId, $quantity, $price, '$itemNote')");
+            query("INSERT INTO order_items (order_id, menu_item_id, quantity, price, note, status) 
+                   VALUES ($orderId, $menuItemId, $quantity, $price, '$itemNote', '$itemStatus')");
+
+            // ตัดสต๊อกคงเหลือถ้าสินค้านั้นเปิดใช้งานสต๊อก
+            query("UPDATE menu_items SET stock_qty = GREATEST(0, stock_qty - $quantity) 
+                   WHERE id = $menuItemId AND shop_id = $shopId AND stock_qty IS NOT NULL");
         }
         
-        // อัปเดตสถานะโต๊ะเป็น occupied
-        query("UPDATE tables SET status = 'occupied' WHERE id = $tableId AND shop_id = $shopId");
+        $changeAmount = 0;
+        if ($instantPay) {
+            if ($cashReceived <= 0) {
+                $cashReceived = $totalAmount;
+            }
+            $changeAmount = max(0, $cashReceived - $totalAmount);
+            query("INSERT INTO payments (shop_id, order_id, amount, payment_method, cash_received, change_amount) 
+                   VALUES ($shopId, $orderId, $totalAmount, '$paymentMethod', $cashReceived, $changeAmount)");
+        } else {
+            // อัปเดตสถานะโต๊ะเป็น occupied เฉพาะออเดอร์ที่ยังไม่จ่ายเงิน
+            if ($rawTableCode !== 'WALKIN') {
+                query("UPDATE tables SET status = 'occupied' WHERE id = $tableId AND shop_id = $shopId");
+            }
+        }
         
         echo json_encode([
             'success' => true, 
-            'message' => 'สร้างออเดอร์เรียบร้อย',
+            'message' => $instantPay ? 'ชำระเงินและบันทึกยอดขายเรียบร้อย' : 'สร้างออเดอร์เรียบร้อย',
             'data' => [
                 'order_id' => $orderId,
-                'order_no' => $orderNo
+                'order_no' => $orderNo,
+                'total_amount' => $totalAmount,
+                'change_amount' => $changeAmount
             ]
         ], JSON_UNESCAPED_UNICODE);
         break;

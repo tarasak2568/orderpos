@@ -42,21 +42,26 @@ function renderDynamicSeoTags(array $options = []) {
     $siteName = 'OrderPOS Cloud Restaurant Platform';
     $ogType = 'website';
 
-    // กรณีเป็นหน้าร้านค้าสมาชิก (Dynamic Restaurant SEO)
+    // กรณีเป็นหน้าร้านค้าสมาชิก (Dynamic Restaurant / Retail Store SEO)
     if ($type === 'restaurant' && $shop) {
-        $shopName = trim($shop['shop_name'] ?? 'ร้านอาหาร');
+        $shopName = trim($shop['shop_name'] ?? 'ร้านค้า');
         $shopSlug = trim($shop['shop_slug'] ?? 'main-shop');
+        $shopType = $shop['shop_type'] ?? 'restaurant';
+        $isRetail = ($shopType === 'retail');
+
         $siteName = $shopName . ' | OrderPOS';
-        $ogType = 'restaurant.restaurant';
+        $ogType = $isRetail ? 'website' : 'restaurant.restaurant';
 
         // 1. Dynamic Title
         if (!empty($shop['seo_title'])) {
             $title = $shop['seo_title'];
         } else {
-            $title = $shopName . ' - สั่งอาหารออนไลน์ & เมนูแนะนำ | OrderPOS';
+            $title = $isRetail
+                ? ($shopName . ' - รายการสินค้า & สั่งซื้อออนไลน์ | OrderPOS')
+                : ($shopName . ' - สั่งอาหารออนไลน์ & เมนูแนะนำ | OrderPOS');
         }
 
-        // 2. Dynamic Description (ดึงจาก seo_description หรือ description หรือสร้างอัตโนมัติจากรายการเมนูจริง)
+        // 2. Dynamic Description (ดึงจาก seo_description หรือ description หรือสร้างอัตโนมัติจากรายการเมนู/สินค้าจริง)
         if (!empty($shop['seo_description'])) {
             $description = $shop['seo_description'];
         } elseif (!empty($shop['description'])) {
@@ -68,8 +73,9 @@ function renderDynamicSeoTags(array $options = []) {
                     $sampleNames[] = $mi['name'] . ' (' . number_format((float)$mi['price'], 0) . '฿)';
                 }
             }
-            $menuHighlight = !empty($sampleNames) ? ' เมนูแนะนำ: ' . implode(', ', $sampleNames) : '';
-            $description = 'สั่งอาหารออนไลน์ร้าน ' . $shopName . ' ผ่านระบบ QR Code สะดวก รวดเร็ว' . $menuHighlight;
+            $labelHighlight = $isRetail ? ' สินค้าแนะนำ: ' : ' เมนูแนะนำ: ';
+            $menuHighlight = !empty($sampleNames) ? $labelHighlight . implode(', ', $sampleNames) : '';
+            $description = ($isRetail ? 'เลือกซื้อสินค้าร้าน ' : 'สั่งอาหารออนไลน์ร้าน ') . $shopName . ' สะดวก รวดเร็ว' . $menuHighlight;
         }
 
         // 3. Dynamic Keywords
@@ -78,7 +84,7 @@ function renderDynamicSeoTags(array $options = []) {
         } else {
             $catNames = array_map(function($c) { return $c['name'] ?? ''; }, array_slice($categories, 0, 5));
             $catStr = !empty($catNames) ? ', ' . implode(', ', array_filter($catNames)) : '';
-            $keywords = $shopName . ', เมนูร้าน ' . $shopName . ', สั่งอาหาร ' . $shopName . $catStr . ', OrderPOS';
+            $keywords = $shopName . ($isRetail ? ', สินค้าร้าน ' : ', เมนูร้าน ') . $shopName . $catStr . ', OrderPOS';
         }
 
         // 4. Canonical URL ของร้านค้า
@@ -143,9 +149,10 @@ HTML;
 }
 
 /**
- * สร้าง JSON-LD Schema ประเภท Restaurant + Menu สำหรับหน้าร้านค้าสมาชิก
+ * สร้าง JSON-LD Schema ประเภท Restaurant หรือ Store/GroceryStore สำหรับหน้าร้านค้าสมาชิก
  */
 function buildRestaurantJsonLd(array $shop, array $menuItems, array $categories, string $url, string $image) {
+    $isRetail = (($shop['shop_type'] ?? 'restaurant') === 'retail');
     $prices = array_map(function($item) {
         return floatval($item['price'] ?? 0);
     }, $menuItems);
@@ -158,7 +165,57 @@ function buildRestaurantJsonLd(array $shop, array $menuItems, array $categories,
         $priceRange = "฿{$minPrice} - ฿{$maxPrice}";
     }
 
-    // จัดกลุ่มรายการอาหารตามหมวดหมู่เพื่อทำ MenuSection
+    if ($isRetail) {
+        $products = [];
+        foreach (array_slice($menuItems, 0, 30) as $mi) {
+            $inStock = (!isset($mi['stock_qty']) || $mi['stock_qty'] === null || intval($mi['stock_qty']) > 0);
+            $prod = [
+                '@type' => 'Product',
+                'name' => $mi['name'],
+                'description' => !empty($mi['description']) ? $mi['description'] : $mi['name'],
+                'offers' => [
+                    '@type' => 'Offer',
+                    'price' => number_format((float)$mi['price'], 2, '.', ''),
+                    'priceCurrency' => 'THB',
+                    'availability' => $inStock ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock'
+                ]
+            ];
+            if (!empty($mi['sku'])) {
+                $prod['sku'] = $mi['sku'];
+            }
+            $products[] = $prod;
+        }
+
+        $schema = [
+            '@context' => 'https://schema.org',
+            '@type' => 'Store',
+            'name' => $shop['shop_name'] ?? 'ร้านค้าปลีก',
+            'description' => !empty($shop['description']) ? $shop['description'] : ('เลือกซื้อสินค้าร้าน ' . ($shop['shop_name'] ?? '')),
+            'url' => $url,
+            'image' => $image,
+            'priceRange' => $priceRange
+        ];
+        if (!empty($shop['phone'])) {
+            $schema['telephone'] = $shop['phone'];
+        }
+        if (!empty($shop['address'])) {
+            $schema['address'] = [
+                '@type' => 'PostalAddress',
+                'streetAddress' => $shop['address'],
+                'addressCountry' => 'TH'
+            ];
+        }
+        if (!empty($products)) {
+            $schema['hasOfferCatalog'] = [
+                '@type' => 'OfferCatalog',
+                'name' => 'รายการสินค้าร้าน ' . ($shop['shop_name'] ?? ''),
+                'itemListElement' => $products
+            ];
+        }
+        return $schema;
+    }
+
+    // จัดกลุ่มรายการอาหารตามหมวดหมู่เพื่อทำ MenuSection (สำหรับร้านอาหาร)
     $menuSections = [];
     foreach ($categories as $cat) {
         $catId = intval($cat['id'] ?? 0);

@@ -7,6 +7,7 @@ $errorMsg = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $shop_name = trim($_POST['shop_name'] ?? '');
+    $shop_type = ($_POST['shop_type'] ?? 'restaurant') === 'retail' ? 'retail' : 'restaurant';
     $raw_slug = trim($_POST['shop_slug'] ?? '');
     $description = trim($_POST['description'] ?? '');
     $phone = trim($_POST['phone'] ?? '');
@@ -18,13 +19,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $seo_keywords = trim($_POST['seo_keywords'] ?? '');
 
     if ($shop_name === '') {
-        $errorMsg = 'กรุณาระบุชื่อร้านอาหาร';
+        $errorMsg = 'กรุณาระบุชื่อร้านค้า';
     } else {
         $slugSource = $raw_slug !== '' ? $raw_slug : $shop_name;
         $uniqueSlug = createUniqueShopSlug($slugSource, $shopId);
 
         $escName = escape($shop_name);
         $escSlug = escape($uniqueSlug);
+        $escType = escape($shop_type);
         $escDesc = escape($description);
         $escPhone = escape($phone);
         $escPromptPay = escape($promptpay_number);
@@ -37,6 +39,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $updated = query("UPDATE shops SET
             shop_name = '$escName',
             shop_slug = '$escSlug',
+            shop_type = '$escType',
             description = '$escDesc',
             phone = '$escPhone',
             promptpay_number = '$escPromptPay',
@@ -48,8 +51,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             WHERE id = $shopId");
 
         if ($updated) {
+            if ($shop_type === 'retail') {
+                query("INSERT IGNORE INTO tables (shop_id, table_code, table_name, capacity, status)
+                       VALUES ($shopId, 'WALKIN', 'ขายหน้าร้าน (Walk-in)', 1, 'available')");
+            }
             $_SESSION['shop_name'] = $shop_name;
             $_SESSION['shop_slug'] = $uniqueSlug;
+            $_SESSION['shop_type'] = $shop_type;
             $currentShop = getCurrentShop($shopId);
             $successMsg = 'บันทึกข้อมูลร้านค้าและการตั้งค่า Dynamic SEO เรียบร้อยแล้ว';
         } else {
@@ -88,11 +96,19 @@ $publicShopUrl = $baseUrl . '/shop/' . rawurlencode($shop['shop_slug']);
         <div class="card-body">
             <div class="form-row">
                 <div class="form-group">
-                    <label>ชื่อร้านอาหาร *</label>
+                    <label>ชื่อร้านค้า *</label>
                     <input type="text" name="shop_name" id="inpShopName" required value="<?= htmlspecialchars($shop['shop_name'] ?? '') ?>" oninput="updateSeoPreview()">
                 </div>
                 <div class="form-group">
-                    <label>ลิงก์ร้านค้า (Shop Slug URL)</label>
+                    <label>ประเภทธุรกิจ / โหมดการทำงานของร้าน</label>
+                    <select name="shop_type" id="inpShopType" onchange="updateSeoPreview()">
+                        <option value="restaurant" <?= (($shop['shop_type'] ?? 'restaurant') === 'restaurant') ? 'selected' : '' ?>>🍽️ ร้านอาหาร / คาเฟ่ (มีระบบโต๊ะ + จอห้องครัว + คิดเงิน)</option>
+                        <option value="retail" <?= (($shop['shop_type'] ?? '') === 'retail') ? 'selected' : '' ?>>🛒 ร้านของชำ / มินิมาร์ท / ค้าปลีก (คิดเงินด่วนหน้า POS + บาร์โค้ด + ตัดสต๊อก)</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>ลิงก์ร้านค้า (Shop Slug URL)</label>
                     <input type="text" name="shop_slug" id="inpShopSlug" value="<?= htmlspecialchars($shop['shop_slug'] ?? '') ?>" oninput="updateSeoPreview()">
                     <small style="color:var(--gray);display:block;margin-top:4px;">
                         URL หน้าร้านของคุณ: <strong id="previewUrlText"><?= htmlspecialchars($publicShopUrl) ?></strong>

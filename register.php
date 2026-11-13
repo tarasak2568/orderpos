@@ -6,6 +6,7 @@ $error = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $shop_name = trim($_POST['shop_name'] ?? '');
+    $shop_type = ($_POST['shop_type'] ?? 'restaurant') === 'retail' ? 'retail' : 'restaurant';
     $raw_slug = trim($_POST['shop_slug'] ?? '');
     $full_name = trim($_POST['full_name'] ?? '');
     $phone = trim($_POST['phone'] ?? '');
@@ -34,13 +35,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $escShopName = escape($shop_name);
             $escShopSlug = escape($shopSlug);
+            $escShopType = escape($shop_type);
             $escPhone = escape($phone);
             $escFullName = escape($full_name);
-            $defaultDesc = escape("สั่งอาหารออนไลน์ร้าน {$shop_name} สะดวก รวดเร็ว ผ่านระบบ QR Code");
-            $defaultSeoTitle = escape("{$shop_name} - สั่งอาหารออนไลน์ & เมนูแนะนำ | OrderPOS");
 
-            $insertShop = query("INSERT INTO shops (shop_name, shop_slug, description, phone, promptpay_number, seo_title, seo_description, is_active)
-                                 VALUES ('$escShopName', '$escShopSlug', '$defaultDesc', '$escPhone', '$escPhone', '$defaultSeoTitle', '$defaultDesc', 1)");
+            if ($shop_type === 'retail') {
+                $defaultDesc = escape("เลือกซื้อสินค้าร้าน {$shop_name} สะดวก รวดเร็ว ครบครัน");
+                $defaultSeoTitle = escape("{$shop_name} - รายการสินค้า & สั่งซื้อออนไลน์ | OrderPOS");
+            } else {
+                $defaultDesc = escape("สั่งอาหารออนไลน์ร้าน {$shop_name} สะดวก รวดเร็ว ผ่านระบบ QR Code");
+                $defaultSeoTitle = escape("{$shop_name} - สั่งอาหารออนไลน์ & เมนูแนะนำ | OrderPOS");
+            }
+
+            $insertShop = query("INSERT INTO shops (shop_name, shop_slug, shop_type, description, phone, promptpay_number, seo_title, seo_description, is_active)
+                                 VALUES ('$escShopName', '$escShopSlug', '$escShopType', '$defaultDesc', '$escPhone', '$escPhone', '$defaultSeoTitle', '$defaultDesc', 1)");
 
             if ($insertShop) {
                 global $conn;
@@ -54,14 +62,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($insertUser) {
                     $newUserId = intval($conn->insert_id);
 
-                    // สร้างหมวดหมู่ เมนูตัวอย่าง และโต๊ะเริ่มต้นให้ร้านใหม่อัตโนมัติ
-                    seedNewShopDefaults($newShopId);
+                    // สร้างหมวดหมู่ เมนู/สินค้าตัวอย่าง และจุดขายเริ่มต้นตามประเภทร้านอัตโนมัติ
+                    seedNewShopDefaults($newShopId, $shop_type);
 
                     // ล็อกอินเข้าสู่ระบบทันที
                     $_SESSION['user_id'] = $newUserId;
                     $_SESSION['shop_id'] = $newShopId;
                     $_SESSION['shop_name'] = $shop_name;
                     $_SESSION['shop_slug'] = $shopSlug;
+                    $_SESSION['shop_type'] = $shop_type;
                     $_SESSION['username'] = $username;
                     $_SESSION['full_name'] = $full_name;
                     $_SESSION['role'] = 'admin';
@@ -444,7 +453,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             <form method="POST" id="registerForm">
                 <div class="modern-form-group">
-                    <label for="shop_name">ชื่อร้านอาหารของคุณ <span class="req">*</span></label>
+                    <label>เลือกรูปแบบธุรกิจของคุณ <span class="req">*</span></label>
+                    <div class="form-grid-2" style="gap:12px;">
+                        <label style="display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border:2px solid #E2E8F0;border-radius:12px;cursor:pointer;background:#F8FAFC;margin:0;" id="cardTypeRestaurant">
+                            <input type="radio" name="shop_type" value="restaurant" <?= (($_POST['shop_type'] ?? 'restaurant') !== 'retail') ? 'checked' : '' ?> onchange="highlightShopType()" style="margin-top:3px;">
+                            <div>
+                                <div style="font-weight:700;color:#0F172A;font-size:14px;"><i class="fas fa-utensils" style="color:#FF6B35;"></i> ร้านอาหาร / คาเฟ่</div>
+                                <div style="font-size:12px;color:#64748B;font-weight:400;">มีระบบโต๊ะ, จอห้องครัว, สแกน QR สั่งอาหาร</div>
+                            </div>
+                        </label>
+                        <label style="display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border:2px solid #E2E8F0;border-radius:12px;cursor:pointer;background:#F8FAFC;margin:0;" id="cardTypeRetail">
+                            <input type="radio" name="shop_type" value="retail" <?= (($_POST['shop_type'] ?? '') === 'retail') ? 'checked' : '' ?> onchange="highlightShopType()" style="margin-top:3px;">
+                            <div>
+                                <div style="font-weight:700;color:#0F172A;font-size:14px;"><i class="fas fa-basket-shopping" style="color:#FF6B35;"></i> ร้านของชำ / ร้านค้าปลีก</div>
+                                <div style="font-size:12px;color:#64748B;font-weight:400;">ขายหน้าร้านคิดเงินด่วน, ค้นหาบาร์โค้ด, ตัดสต๊อก</div>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="modern-form-group">
+                    <label for="shop_name">ชื่อร้านค้าของคุณ <span class="req">*</span></label>
                     <div class="input-icon-wrap">
                         <i class="fas fa-store prefix-icon"></i>
                         <input
@@ -452,7 +481,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             id="shop_name"
                             name="shop_name"
                             required
-                            placeholder="เช่น กะเพราอินเตอร์, บ้านสวนคาเฟ่"
+                            placeholder="เช่น ร้านค้าเจริญสุข, กะเพราอินเตอร์, มินิมาร์ทหน้าหมู่บ้าน"
                             value="<?= htmlspecialchars($_POST['shop_name'] ?? '') ?>"
                             oninput="updateSlugPreview(this.value)"
                         >
@@ -571,6 +600,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </div>
 
     <script>
+        function highlightShopType() {
+            const isRetail = document.querySelector('input[name="shop_type"]:checked')?.value === 'retail';
+            const cardRest = document.getElementById('cardTypeRestaurant');
+            const cardRetail = document.getElementById('cardTypeRetail');
+            if (cardRest && cardRetail) {
+                cardRest.style.borderColor = !isRetail ? '#FF6B35' : '#E2E8F0';
+                cardRest.style.background = !isRetail ? '#FFF7ED' : '#F8FAFC';
+                cardRetail.style.borderColor = isRetail ? '#FF6B35' : '#E2E8F0';
+                cardRetail.style.background = isRetail ? '#FFF7ED' : '#F8FAFC';
+            }
+        }
+        highlightShopType();
+
         function updateSlugPreview(val) {
             const slugInput = document.getElementById('shop_slug');
             const shopInput = document.getElementById('shop_name');
