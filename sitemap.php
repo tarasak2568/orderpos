@@ -25,6 +25,12 @@ $urls = [
         'lastmod' => $today,
         'changefreq' => 'weekly',
         'priority' => '0.9'
+    ],
+    [
+        'loc' => $baseUrl . '/guide',
+        'lastmod' => $today,
+        'changefreq' => 'weekly',
+        'priority' => '0.85'
     ]
 ];
 

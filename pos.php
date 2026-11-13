@@ -41,6 +41,7 @@ $isRetail = (($currentShop['shop_type'] ?? 'restaurant') === 'retail');
             <?php endif; ?>
             <li><a href="billing.php"><i class="fas fa-receipt"></i> เก็บเงิน</a></li>
             <li><a href="admin/menu_manage.php"><i class="fas fa-boxes-stacked"></i> <?= $isRetail ? 'สินค้า/สต๊อก' : 'จัดการเมนู' ?></a></li>
+            <li><a href="admin/guide.php"><i class="fas fa-book-open"></i> คู่มือ</a></li>
         </ul>
         <div class="navbar-right">
             <span class="user-info"><i class="fas fa-user"></i> <?= htmlspecialchars($_SESSION['full_name']) ?></span>

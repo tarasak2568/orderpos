@@ -66,8 +66,15 @@ $storeTagline = trim($shop['description'] ?? '') !== ''
                     <?php endif; ?>
                 </div>
             <?php endif; ?>
-            <div class="table-info" id="tableInfo">
-                <?= $isWalkinChannel ? 'สั่งซื้อสินค้าหน้าร้าน / ออนไลน์' : ('โต๊ะ ' . $tableCode) ?>
+            <div style="display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; margin-top: 4px;">
+                <div class="table-info" id="tableInfo">
+                    <?= $isWalkinChannel ? 'สั่งซื้อสินค้าหน้าร้าน / ออนไลน์' : ('โต๊ะ ' . $tableCode) ?>
+                </div>
+                <button type="button"
+                        onclick="openCustomerGuideModal()"
+                        style="background: rgba(255,255,255,0.2); color: #FFFFFF; border: 1px solid rgba(255,255,255,0.45); border-radius: 999px; padding: 4px 12px; font-size: 12.5px; font-family: inherit; cursor: pointer; display: inline-flex; align-items: center; gap: 5px;">
+                    <i class="fas fa-circle-question"></i> <?= $isRetail ? 'วิธีสั่งซื้อ' : 'วิธีสั่งอาหาร' ?>
+                </button>
             </div>
         </header>
 
@@ -111,6 +118,43 @@ $storeTagline = trim($shop['description'] ?? '') !== ''
         </aside>
     </main>
 
+    <!-- Customer Quick Guide Modal -->
+    <div id="customerGuideModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="customerGuideTitle" style="padding: 16px;">
+        <div class="modal" style="padding: 22px; max-width: 460px;">
+            <div class="modal-header" style="margin-bottom: 14px;">
+                <h3 id="customerGuideTitle" style="font-size: 18px; display: flex; align-items: center; gap: 8px; margin: 0;">
+                    <i class="fas fa-book-open" style="color: var(--primary);"></i>
+                    <?= $isRetail ? 'วิธีสั่งซื้อสินค้า & ชำระเงิน' : 'วิธีสั่งอาหารผ่าน QR Code' ?>
+                </h3>
+                <button type="button" class="modal-close" onclick="closeCustomerGuideModal()" aria-label="ปิดคู่มือ">&times;</button>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 10px; font-size: 13.5px; color: #334155; line-height: 1.55;">
+                <div style="display: flex; gap: 10px; align-items: flex-start; background: #F8FAFC; padding: 10px 12px; border-radius: 10px;">
+                    <span style="min-width: 24px; height: 24px; border-radius: 50%; background: var(--primary); color: #FFF; font-weight: 700; font-size: 12px; display: inline-flex; align-items: center; justify-content: center;">1</span>
+                    <div><strong><?= $isRetail ? 'เลือกหมวดหมู่ & ค้นหาสินค้า' : 'เลือกหมวดหมู่ & รายการอาหาร' ?></strong><br>แตะแถบหมวดหมู่ด้านบน หรือเลื่อนดูรายการที่มีสถานะพร้อมจำหน่าย</div>
+                </div>
+                <div style="display: flex; gap: 10px; align-items: flex-start; background: #F8FAFC; padding: 10px 12px; border-radius: 10px;">
+                    <span style="min-width: 24px; height: 24px; border-radius: 50%; background: var(--primary); color: #FFF; font-weight: 700; font-size: 12px; display: inline-flex; align-items: center; justify-content: center;">2</span>
+                    <div><strong>หยิบใส่ตะกร้า & ปรับจำนวน</strong><br>กดปุ่ม "+ เพิ่ม" แล้วแตะแถบตะกร้าด้านล่างเพื่อเพิ่ม/ลดจำนวน (+ / -)</div>
+                </div>
+                <div style="display: flex; gap: 10px; align-items: flex-start; background: #F8FAFC; padding: 10px 12px; border-radius: 10px;">
+                    <span style="min-width: 24px; height: 24px; border-radius: 50%; background: var(--primary); color: #FFF; font-weight: 700; font-size: 12px; display: inline-flex; align-items: center; justify-content: center;">3</span>
+                    <div><strong>ใส่หมายเหตุถึงร้าน (ถ้ามี)</strong><br><?= $isRetail ? 'ระบุรายละเอียด เช่น แยกถุง หรือเวลานัดมารับสินค้าที่หน้าร้าน' : 'ระบุรายละเอียดเพิ่มเติม เช่น ไม่ใส่ผัก เผ็ดน้อย แยกน้ำ' ?></div>
+                </div>
+                <div style="display: flex; gap: 10px; align-items: flex-start; background: #F8FAFC; padding: 10px 12px; border-radius: 10px;">
+                    <span style="min-width: 24px; height: 24px; border-radius: 50%; background: var(--primary); color: #FFF; font-weight: 700; font-size: 12px; display: inline-flex; align-items: center; justify-content: center;">4</span>
+                    <div><strong><?= $isRetail ? 'ยืนยันสั่งซื้อ & ชำระเงิน' : 'ส่งรายการเข้าครัว & เช็กบิล' ?></strong><br><?= $isRetail ? 'กด "ยืนยันสั่งซื้อสินค้า" ออเดอร์จะส่งถึงร้านทันที ชำระเงินสดหรือสแกน PromptPay ได้เลย' : 'กด "ส่งรายการสั่งซื้อ" ออเดอร์จะเข้าครัวทันที สั่งเพิ่มได้ตลอด และแจ้งพนักงานเช็กบิลเมื่อทานเสร็จ' ?></div>
+                </div>
+            </div>
+            <div class="modal-footer" style="justify-content: space-between; margin-top: 16px; padding-top: 12px;">
+                <a href="/guide?tab=customer" target="_blank" rel="noopener" class="btn btn-outline btn-sm">
+                    <i class="fas fa-book"></i> คู่มือฉบับเต็ม
+                </a>
+                <button type="button" class="btn btn-primary btn-sm" onclick="closeCustomerGuideModal()">เข้าใจแล้ว</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         window.ORDERPOS_SHOP = {
             shopId: <?= $shopId ?>,
@@ -119,6 +163,29 @@ $storeTagline = trim($shop['description'] ?? '') !== ''
             shopType: <?= json_encode($shopType) ?>,
             tableId: <?= json_encode($tableCode) ?>
         };
+
+        function openCustomerGuideModal() {
+            const modal = document.getElementById('customerGuideModal');
+            if (modal) modal.classList.add('active');
+        }
+
+        function closeCustomerGuideModal() {
+            const modal = document.getElementById('customerGuideModal');
+            if (modal) modal.classList.remove('active');
+        }
+
+        (function () {
+            const modal = document.getElementById('customerGuideModal');
+            if (!modal) return;
+            modal.addEventListener('click', function (e) {
+                if (e.target === modal) closeCustomerGuideModal();
+            });
+            document.addEventListener('keydown', function (e) {
+                if (e.key === 'Escape' && modal.classList.contains('active')) {
+                    closeCustomerGuideModal();
+                }
+            });
+        })();
     </script>
     <script src="/assets/js/script.js?v=10"></script>
 </body>

@@ -623,6 +623,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <i class="fas fa-fire-burner"></i>
                     <span>หน้าจอห้องครัว</span>
                 </a>
+                <a href="guide" class="quick-link-card" style="grid-column: 1 / -1; flex-direction: row; justify-content: center; background: #FFF7ED; border-color: #FDBA74; color: #C2410C;">
+                    <i class="fas fa-circle-question"></i>
+                    <span>คู่มือการใช้งานระบบ (สำหรับลูกค้า & เจ้าของร้าน)</span>
+                </a>
             </div>
         </div>
     </div>

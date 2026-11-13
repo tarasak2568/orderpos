@@ -6,6 +6,7 @@ Allow: /
 Allow: /shop/
 Allow: /register.php
 Allow: /menu.php
+Allow: /guide
 Disallow: /api/
 Disallow: /admin/
 Disallow: /pos.php

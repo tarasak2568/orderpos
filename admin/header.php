@@ -49,6 +49,7 @@ $isRetailShop = ($_SESSION['shop_type'] === 'retail');
             <li><a href="qr_tables.php" class="<?= basename($_SERVER['PHP_SELF']) == 'qr_tables.php' ? 'active' : '' ?>"><i class="fas fa-qrcode"></i> QR Code</a></li>
             <li><a href="orders_manage.php" class="<?= basename($_SERVER['PHP_SELF']) == 'orders_manage.php' ? 'active' : '' ?>"><i class="fas fa-clipboard-list"></i> <?= $isRetailShop ? 'บิลขาย' : 'ออเดอร์' ?></a></li>
             <li><a href="shop_settings.php" class="<?= basename($_SERVER['PHP_SELF']) == 'shop_settings.php' ? 'active' : '' ?>"><i class="fas fa-sliders"></i> ตั้งค่าร้าน & SEO</a></li>
+            <li><a href="guide.php" class="<?= basename($_SERVER['PHP_SELF']) == 'guide.php' ? 'active' : '' ?>"><i class="fas fa-book-open"></i> คู่มือใช้งาน</a></li>
         </ul>
         <div class="navbar-right">
             <span class="user-info"><i class="fas fa-user"></i> <?= htmlspecialchars($_SESSION['full_name']) ?></span>
@@ -72,6 +73,7 @@ $isRetailShop = ($_SESSION['shop_type'] === 'retail');
                 <li><a href="qr_tables.php" class="<?= basename($_SERVER['PHP_SELF']) == 'qr_tables.php' ? 'active' : '' ?>"><i class="fas fa-qrcode"></i> QR Code หน้าร้าน</a></li>
                 <li><a href="orders_manage.php" class="<?= basename($_SERVER['PHP_SELF']) == 'orders_manage.php' ? 'active' : '' ?>"><i class="fas fa-clipboard-list"></i> <?= $isRetailShop ? 'ประวัติการขาย' : 'ดูออเดอร์' ?></a></li>
                 <li><a href="shop_settings.php" class="<?= basename($_SERVER['PHP_SELF']) == 'shop_settings.php' ? 'active' : '' ?>"><i class="fas fa-sliders"></i> ตั้งค่าร้าน & SEO</a></li>
+                <li><a href="guide.php" class="<?= basename($_SERVER['PHP_SELF']) == 'guide.php' ? 'active' : '' ?>"><i class="fas fa-book-open"></i> คู่มือการใช้งาน</a></li>
                 <li><hr style="margin: 10px 20px; border-color: #E0E0E0;"></li>
                 <li><a href="../menu.php?shop=<?= urlencode($currentShop['shop_slug']) ?>" target="_blank"><i class="fas fa-external-link-alt"></i> ดูหน้าร้านออนไลน์ (ลูกค้า)</a></li>
                 <li><a href="../logout.php"><i class="fas fa-sign-out-alt"></i> ออกจากระบบ</a></li>

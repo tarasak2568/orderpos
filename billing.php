@@ -47,6 +47,7 @@ $unpaidOrders = fetchAll(query("
             <li><a href="admin/dashboard.php"><i class="fas fa-home"></i> หน้าแรก</a></li>
             <li><a href="pos.php"><i class="fas fa-cash-register"></i> ขายหน้าร้าน</a></li>
             <li><a href="billing.php" class="active"><i class="fas fa-receipt"></i> เก็บเงิน</a></li>
+            <li><a href="admin/guide.php"><i class="fas fa-book-open"></i> คู่มือ</a></li>
         </ul>
         <div class="navbar-right">
             <span class="user-info"><i class="fas fa-user"></i> <?= $_SESSION['full_name'] ?></span>

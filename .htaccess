@@ -10,6 +10,9 @@ DirectoryIndex index.php
   # Friendly Registration URL
   RewriteRule ^register/?$ register.php [L,QSA]
 
+  # Friendly User Guide URL
+  RewriteRule ^guide/?$ guide.php [L,QSA]
+
   # Friendly Shop & Table Menu URLs (Dynamic SEO Storefront)
   RewriteRule ^shop/([^/]+)/table/([^/]+)/?$ menu.php?shop=$1&table_id=$2 [L,QSA]
   RewriteRule ^shop/([^/]+)/?$ menu.php?shop=$1 [L,QSA]

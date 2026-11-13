@@ -595,6 +595,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             <div class="bottom-login-link">
                 มีบัญชีร้านค้าอยู่แล้วใช่ไหม? <a href="login.php"><i class="fas fa-right-to-bracket"></i> เข้าสู่ระบบที่นี่</a>
+                <span style="margin: 0 8px; color: #CBD5E1;">|</span>
+                <a href="guide" target="_blank"><i class="fas fa-book-open"></i> คู่มือการใช้งาน</a>
             </div>
         </div>
     </div>
