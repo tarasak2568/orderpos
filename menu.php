@@ -5,10 +5,14 @@ require_once 'config/seo.php';
 $shopId = currentShopId();
 $shop = getCurrentShop($shopId);
 $shopId = intval($shop['id']);
+$shopType = $shop['shop_type'] ?? 'restaurant';
+$isRetail = ($shopType === 'retail');
 
-$tableCode = isset($_GET['table_id']) ? htmlspecialchars(trim($_GET['table_id'])) : (isset($_GET['table']) ? htmlspecialchars(trim($_GET['table'])) : 'T01');
+$rawTable = $_GET['table_id'] ?? ($_GET['table'] ?? ($isRetail ? 'WALKIN' : 'T01'));
+$tableCode = htmlspecialchars(trim($rawTable), ENT_QUOTES, 'UTF-8');
+$isWalkinChannel = $isRetail || strtoupper(trim($rawTable)) === 'WALKIN';
 
-// ดึงหมวดหมู่และรายการอาหารของร้านนี้ เพื่อใช้สร้าง Dynamic SEO + Restaurant JSON-LD Schema
+// ดึงหมวดหมู่และรายการสินค้า/อาหารที่เปิดขายของร้าน เพื่อใช้สร้าง Dynamic SEO + JSON-LD Schema
 $categories = fetchAll(query("SELECT * FROM categories WHERE shop_id = $shopId AND is_active = 1 ORDER BY sort_order ASC"));
 $menuItems = fetchAll(query("
     SELECT mi.*, c.name as category_name
@@ -17,6 +21,12 @@ $menuItems = fetchAll(query("
     WHERE mi.shop_id = $shopId AND mi.is_available = 1
     ORDER BY mi.sort_order ASC, mi.name ASC
 "));
+
+$storeTagline = trim($shop['description'] ?? '') !== ''
+    ? $shop['description']
+    : ($isRetail
+        ? 'คัดสรรสินค้าคุณภาพ ราคาประหยัด สั่งซื้อสะดวกและชำระเงินได้ทันที'
+        : 'ปรุงสดใหม่ทุกเมนู สั่งง่ายผ่านระบบออนไลน์ ส่งตรงเข้าครัวทันที');
 ?>
 <!DOCTYPE html>
 <html lang="th">
@@ -35,22 +45,37 @@ $menuItems = fetchAll(query("
     <link rel="stylesheet" href="/assets/css/style.css?v=9">
 </head>
 <body>
-    <div class="menu-page" data-shop-id="<?= $shopId ?>" data-shop-slug="<?= htmlspecialchars($shop['shop_slug']) ?>" data-table-id="<?= $tableCode ?>">
+    <main class="menu-page" data-shop-id="<?= $shopId ?>" data-shop-slug="<?= htmlspecialchars($shop['shop_slug'], ENT_QUOTES, 'UTF-8') ?>" data-table-id="<?= $tableCode ?>">
         <!-- Header -->
-        <div class="menu-header">
-            <h1><i class="fas fa-utensils"></i> <span id="shopName"><?= htmlspecialchars($shop['shop_name']) ?></span></h1>
-            <?php if (!empty($shop['description'])): ?>
-                <p style="margin: 4px 0 6px; font-size: 13px; opacity: 0.9;"><?= htmlspecialchars($shop['description']) ?></p>
+        <header class="menu-header">
+            <h1>
+                <i class="fas <?= $isRetail ? 'fa-store' : 'fa-utensils' ?>"></i>
+                <span id="shopName"><?= htmlspecialchars($shop['shop_name'], ENT_QUOTES, 'UTF-8') ?></span>
+            </h1>
+            <p style="margin: 4px 0 8px; font-size: 13px; opacity: 0.92; line-height: 1.45;">
+                <?= htmlspecialchars($storeTagline, ENT_QUOTES, 'UTF-8') ?>
+            </p>
+            <?php if (!empty($shop['phone']) || !empty($shop['address'])): ?>
+                <div style="font-size: 12px; opacity: 0.88; margin-bottom: 8px; display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
+                    <?php if (!empty($shop['phone'])): ?>
+                        <span><i class="fas fa-phone"></i> <?= htmlspecialchars($shop['phone'], ENT_QUOTES, 'UTF-8') ?></span>
+                    <?php endif; ?>
+                    <?php if (!empty($shop['address'])): ?>
+                        <span><i class="fas fa-location-dot"></i> <?= htmlspecialchars($shop['address'], ENT_QUOTES, 'UTF-8') ?></span>
+                    <?php endif; ?>
+                </div>
             <?php endif; ?>
-            <div class="table-info" id="tableInfo">โต๊ะ <?= $tableCode ?></div>
-        </div>
-        
+            <div class="table-info" id="tableInfo">
+                <?= $isWalkinChannel ? 'สั่งซื้อสินค้าหน้าร้าน / ออนไลน์' : ('โต๊ะ ' . $tableCode) ?>
+            </div>
+        </header>
+
         <!-- Categories -->
-        <div class="menu-categories"></div>
-        
-        <!-- Menu Items -->
-        <div class="menu-items"></div>
-        
+        <nav class="menu-categories" aria-label="หมวดหมู่<?= $isRetail ? 'สินค้า' : 'อาหาร' ?>"></nav>
+
+        <!-- Menu / Product Items -->
+        <section class="menu-items" aria-label="รายการ<?= $isRetail ? 'สินค้า' : 'เมนู' ?>"></section>
+
         <!-- Cart Bar -->
         <div class="cart-bar">
             <div class="cart-info" onclick="customerMenu.toggleCart()">
@@ -59,14 +84,14 @@ $menuItems = fetchAll(query("
             </div>
             <div class="cart-total">฿0</div>
             <button class="btn btn-primary" onclick="customerMenu.toggleCart()">
-                <i class="fas fa-shopping-cart"></i> สั่งเลย
+                <i class="fas fa-shopping-cart"></i> <?= $isRetail ? 'สั่งซื้อเลย' : 'สั่งเลย' ?>
             </button>
         </div>
-        
+
         <!-- Cart Sidebar -->
-        <div class="cart-sidebar">
+        <aside class="cart-sidebar" aria-label="ตะกร้าสินค้า">
             <div class="cart-sidebar-header">
-                <h3><i class="fas fa-shopping-cart"></i> ตะกร้าสินค้า (<?= htmlspecialchars($shop['shop_name']) ?>)</h3>
+                <h3><i class="fas fa-shopping-cart"></i> ตะกร้าสินค้า (<?= htmlspecialchars($shop['shop_name'], ENT_QUOTES, 'UTF-8') ?>)</h3>
                 <button class="modal-close" onclick="customerMenu.toggleCart()">&times;</button>
             </div>
             <div class="cart-items"></div>
@@ -76,23 +101,24 @@ $menuItems = fetchAll(query("
                     <span>฿0</span>
                 </div>
                 <div class="form-group">
-                    <textarea id="orderNote" placeholder="หมายเหตุเพิ่มเติม (ไม่บังคับ)" style="width:100%;padding:10px;border:2px solid #E0E0E0;border-radius:8px;font-family:inherit;resize:vertical;min-height:60px;"></textarea>
+                    <textarea id="orderNote" placeholder="<?= $isRetail ? 'หมายเหตุเพิ่มเติม เช่น แยกถุง หรือฝากหมายเหตุถึงร้าน (ไม่บังคับ)' : 'หมายเหตุเพิ่มเติม เช่น ไม่ใส่ผัก เผ็ดน้อย (ไม่บังคับ)' ?>" style="width:100%;padding:10px;border:2px solid #E0E0E0;border-radius:8px;font-family:inherit;resize:vertical;min-height:60px;"></textarea>
                 </div>
                 <button class="btn btn-primary btn-lg btn-block" onclick="customerMenu.submitOrder()">
-                    <i class="fas fa-paper-plane"></i> ส่งรายการสั่งซื้อ
+                    <i class="fas fa-paper-plane"></i> <?= $isRetail ? 'ยืนยันสั่งซื้อสินค้า' : 'ส่งรายการสั่งซื้อ' ?>
                 </button>
             </div>
-        </div>
-    </div>
-    
+        </aside>
+    </main>
+
     <script>
         window.ORDERPOS_SHOP = {
             shopId: <?= $shopId ?>,
             shopSlug: <?= json_encode($shop['shop_slug']) ?>,
-            shopName: <?= json_encode($shop['shop_name']) ?>,
+            shopName: <?= json_encode($shop['shop_name'], JSON_UNESCAPED_UNICODE) ?>,
+            shopType: <?= json_encode($shopType) ?>,
             tableId: <?= json_encode($tableCode) ?>
         };
     </script>
-    <script src="/assets/js/script.js?v=9"></script>
+    <script src="/assets/js/script.js?v=10"></script>
 </body>
 </html>

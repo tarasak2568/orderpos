@@ -109,9 +109,12 @@ $categories = fetchAll(query("SELECT * FROM categories WHERE shop_id = $shopId A
                     <input type="number" id="menuPrice" step="0.25" required placeholder="0.00">
                 </div>
                 <div class="form-group">
-                    <label>&nbsp;</label>
-                    <div style="display: flex; gap: 20px; padding-top: 8px;">
-                        <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                    <label>สถานะการขาย</label>
+                    <div style="display: flex; gap: 18px; padding-top: 8px; flex-wrap: wrap;">
+                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                            <input type="checkbox" id="menuAvailable" value="1" checked> พร้อมขาย / เปิดแสดง
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
                             <input type="checkbox" id="menuRecommended" value="1"> สินค้าขายดี / แนะนำ
                         </label>
                     </div>
@@ -128,9 +131,16 @@ $categories = fetchAll(query("SELECT * FROM categories WHERE shop_id = $shopId A
 <script>
 let allLoadedItems = [];
 
+function escHtml(str) {
+    return String(str ?? '').replace(/[&<>"']/g, s => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[s]));
+}
+
 function openAddMenuModal() {
     document.getElementById('menuForm').reset();
     document.getElementById('menuId').value = '';
+    document.getElementById('menuAvailable').checked = true;
     document.getElementById('menuModalTitle').textContent = 'เพิ่ม<?= $itemLabel ?>ใหม่';
     openModal('menuModal');
 }
@@ -140,7 +150,11 @@ async function saveCategory(event) {
     const name = document.getElementById('catName').value.trim();
     if (!name) return;
     try {
-        await API.post('categories.php', { name });
+        const res = await API.post('categories.php', { name });
+        if (res && res.success === false) {
+            showToast(res.error || 'ไม่สามารถเพิ่มหมวดหมู่ได้', 'error');
+            return;
+        }
         showToast('เพิ่มหมวดหมู่เรียบร้อย', 'success');
         closeModal('categoryModal');
         setTimeout(() => location.reload(), 600);
@@ -157,6 +171,7 @@ async function loadMenu() {
         const tbody = document.getElementById('menuTableBody');
         
         if (!result.success || result.data.length === 0) {
+            allLoadedItems = [];
             tbody.innerHTML = '<tr><td colspan="8" class="text-center text-gray">ยังไม่มีรายการ<?= $itemLabel ?></td></tr>';
             return;
         }
@@ -172,16 +187,16 @@ async function loadMenu() {
 
             html += `
                 <tr>
-                    <td><code style="font-size:12px;color:#475569;">${item.sku || '-'}</code></td>
-                    <td><strong>${item.name}</strong></td>
-                    <td>${item.category_name || '-'}</td>
+                    <td><code style="font-size:12px;color:#475569;">${escHtml(item.sku || '-')}</code></td>
+                    <td><strong>${escHtml(item.name)}</strong></td>
+                    <td>${escHtml(item.category_name || '-')}</td>
                     <td class="text-primary">${formatCurrency(item.price)}</td>
                     <td>${stockBadge}</td>
                     <td>${item.is_recommended ? '<span class="badge badge-ready">แนะนำ</span>' : '-'}</td>
                     <td>${item.is_available ? '<span class="badge badge-available">พร้อมขาย</span>' : '<span class="badge badge-cancelled">หยุดขาย</span>'}</td>
                     <td class="actions">
-                        <button class="btn btn-sm btn-info" onclick="editMenu(${item.id})"><i class="fas fa-edit"></i></button>
-                        <button class="btn btn-sm btn-danger" onclick="deleteMenu(${item.id})"><i class="fas fa-trash"></i></button>
+                        <button class="btn btn-sm btn-info" onclick="editMenu(${item.id})" title="แก้ไข"><i class="fas fa-edit"></i></button>
+                        <button class="btn btn-sm btn-danger" onclick="deleteMenu(${item.id})" title="ลบ"><i class="fas fa-trash"></i></button>
                     </td>
                 </tr>
             `;
@@ -203,18 +218,23 @@ async function saveMenu(event) {
         description: document.getElementById('menuDescription').value.trim(),
         price: document.getElementById('menuPrice').value,
         stock_qty: stockVal === '' ? null : parseInt(stockVal, 10),
+        is_available: document.getElementById('menuAvailable').checked ? 1 : 0,
         is_recommended: document.getElementById('menuRecommended').checked ? 1 : 0
     };
     
     try {
+        let res;
         if (id) {
             data.id = id;
-            await API.put('menu_items.php', data);
-            showToast('อัปเดต<?= $itemLabel ?>เรียบร้อย', 'success');
+            res = await API.put('menu_items.php', data);
         } else {
-            await API.post('menu_items.php', data);
-            showToast('เพิ่ม<?= $itemLabel ?>เรียบร้อย', 'success');
+            res = await API.post('menu_items.php', data);
         }
+        if (res && res.success === false) {
+            showToast(res.error || 'ไม่สามารถบันทึกข้อมูลได้', 'error');
+            return;
+        }
+        showToast(id ? 'อัปเดต<?= $itemLabel ?>เรียบร้อย' : 'เพิ่ม<?= $itemLabel ?>เรียบร้อย', 'success');
         closeModal('menuModal');
         loadMenu();
         document.getElementById('menuForm').reset();
@@ -236,6 +256,7 @@ async function editMenu(id) {
     document.getElementById('menuStock').value = (item.stock_qty !== null && item.stock_qty !== undefined) ? item.stock_qty : '';
     document.getElementById('menuDescription').value = item.description || '';
     document.getElementById('menuPrice').value = item.price;
+    document.getElementById('menuAvailable').checked = item.is_available == 1;
     document.getElementById('menuRecommended').checked = item.is_recommended == 1;
     
     openModal('menuModal');

@@ -46,22 +46,6 @@ foreach ($shops as $s) {
     ];
 }
 
-// 2. ดึงบทความจาก astroyu_blogs (หากมีตารางในฐานข้อมูล)
-$blogTableCheck = query("SHOW TABLES LIKE 'astroyu_blogs'");
-if ($blogTableCheck && $blogTableCheck->num_rows > 0) {
-    $blogs = fetchAll(query("SELECT slug, pubDate FROM astroyu_blogs ORDER BY pubDate DESC"));
-    foreach ($blogs as $b) {
-        if (!empty($b['slug'])) {
-            $urls[] = [
-                'loc' => $baseUrl . '/blog/' . rawurlencode($b['slug']),
-                'lastmod' => !empty($b['pubDate']) ? date('c', strtotime($b['pubDate'])) : $today,
-                'changefreq' => 'weekly',
-                'priority' => '0.7'
-            ];
-        }
-    }
-}
-
 echo '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
 ?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">

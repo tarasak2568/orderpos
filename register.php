@@ -39,16 +39,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $escPhone = escape($phone);
             $escFullName = escape($full_name);
 
-            if ($shop_type === 'retail') {
-                $defaultDesc = escape("เลือกซื้อสินค้าร้าน {$shop_name} สะดวก รวดเร็ว ครบครัน");
-                $defaultSeoTitle = escape("{$shop_name} - รายการสินค้า & สั่งซื้อออนไลน์ | OrderPOS");
-            } else {
-                $defaultDesc = escape("สั่งอาหารออนไลน์ร้าน {$shop_name} สะดวก รวดเร็ว ผ่านระบบ QR Code");
-                $defaultSeoTitle = escape("{$shop_name} - สั่งอาหารออนไลน์ & เมนูแนะนำ | OrderPOS");
-            }
+            $seoPreset = generateShopSeoPreset($shop_name, $shop_type);
+            $defaultDesc = escape($seoPreset['storefront_description']);
+            $defaultSeoTitle = escape($seoPreset['seo_title']);
+            $defaultSeoDesc = escape($seoPreset['seo_description']);
+            $defaultSeoKeywords = escape($seoPreset['seo_keywords']);
 
-            $insertShop = query("INSERT INTO shops (shop_name, shop_slug, shop_type, description, phone, promptpay_number, seo_title, seo_description, is_active)
-                                 VALUES ('$escShopName', '$escShopSlug', '$escShopType', '$defaultDesc', '$escPhone', '$escPhone', '$defaultSeoTitle', '$defaultDesc', 1)");
+            $insertShop = query("INSERT INTO shops (shop_name, shop_slug, shop_type, description, phone, promptpay_number, seo_title, seo_description, seo_keywords, is_active)
+                                 VALUES ('$escShopName', '$escShopSlug', '$escShopType', '$defaultDesc', '$escPhone', '$escPhone', '$defaultSeoTitle', '$defaultSeoDesc', '$defaultSeoKeywords', 1)");
 
             if ($insertShop) {
                 global $conn;
@@ -95,8 +93,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <?= renderDynamicSeoTags([
     'type' => 'platform',
-    'title' => 'สมัครสมาชิกเปิดร้านอาหารฟรี - OrderPOS ระบบจัดการร้านอาหารออนไลน์',
-    'description' => 'สมัครสมาชิกเพื่อใช้งาน OrderPOS ฟรี! ตั้งชื่อร้านของคุณเอง สร้าง QR Code สั่งอาหารประจำโต๊ะ ระบบรับออเดอร์หน้าร้าน และจอห้องครัวแบบเรียลไทม์',
+    'title' => 'เปิดร้านออนไลน์ & สมัครระบบ POS ฟรี - OrderPOS ร้านอาหาร คาเฟ่ ร้านของชำ',
+    'description' => 'สมัครสมาชิก OrderPOS ฟรีใน 1 นาที ตั้งชื่อร้านและลิงก์ร้านค้า พร้อมระบบ POS คิดเงินไว สั่งผ่าน QR Code สแกนบาร์โค้ด ตัดสต๊อกสินค้า และ Dynamic SEO ติด Google ทันที',
+    'keywords' => getOrderPosKeywordSets()['platform'],
     'canonical' => getBaseSiteUrl() . '/register.php'
 ]) ?>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
@@ -399,33 +398,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     </div>
                     <div>
                         <h1>OrderPOS SaaS</h1>
-                        <span>แพลตฟอร์มระบบ POS สำหรับทุกร้านอาหาร</span>
+                        <span>แพลตฟอร์ม POS สำหรับร้านอาหาร &amp; ร้านของชำ</span>
                     </div>
                 </div>
                 <p style="color:#CBD5E1;font-size:14px;line-height:1.6;">
-                    เริ่มต้นใช้งานระบบจัดการร้านอาหารของคุณเองใน 1 นาที เพียงตั้งชื่อร้าน ระบบจะเตรียมเมนูตัวอย่าง โต๊ะอาหาร และ QR Code พร้อมติด SEO ให้ร้านของคุณโดยอัตโนมัติ
+                    เริ่มต้นเปิดร้านออนไลน์และระบบคิดเงินหน้าร้านภายใน 1 นาที เลือกรูปแบบธุรกิจได้ตามต้องการ ระบบเตรียมหมวดหมู่ สินค้า/เมนูตัวอย่าง บาร์โค้ด QR Code และ Dynamic SEO ให้ร้านของคุณทันที
                 </p>
 
                 <div class="step-list">
                     <div class="step-card">
                         <div class="step-num">1</div>
                         <div>
-                            <h4>ตั้งชื่อร้านอาหารของคุณ</h4>
-                            <p>ระบุชื่อร้านและลิงก์หน้าร้าน (URL) เฉพาะของร้านคุณ พร้อมระบบ Dynamic SEO ติด Google ง่ายขึ้น</p>
+                            <h4>เลือกรูปแบบร้าน &amp; ตั้งลิงก์ร้านค้า</h4>
+                            <p>รองรับทั้งโหมดร้านอาหาร/คาเฟ่ และโหมดร้านของชำ/ค้าปลีก พร้อม URL ร้านค้าและ SEO ที่ออกแบบเพื่อติดอันดับ Google</p>
                         </div>
                     </div>
                     <div class="step-card">
                         <div class="step-num">2</div>
                         <div>
-                            <h4>รับระบบหน้าร้าน POS + จอครัวทันที</h4>
-                            <p>ระบบสร้างหมวดหมู่และโต๊ะเริ่มต้นให้อัตโนมัติ ปรับแต่งเมนูและราคาของร้านได้เอง 100%</p>
+                            <h4>พร้อมขายทันทีทั้ง POS สต๊อก &amp; จอครัว</h4>
+                            <p>ระบบสร้างหมวดหมู่และรายการเริ่มต้นให้พร้อมปรับแต่ง เพิ่มบาร์โค้ด SKU จำนวนสต๊อก และเบอร์พร้อมเพย์รับเงินได้ในคลิกเดียว</p>
                         </div>
                     </div>
                     <div class="step-card">
                         <div class="step-num">3</div>
                         <div>
-                            <h4>พิมพ์ QR Code แปะโต๊ะรับออเดอร์</h4>
-                            <p>ลูกค้าสแกนสั่งอาหารจากมือถือเข้าห้องครัวของร้านคุณโดยตรง ข้อมูลแยกอิสระปลอดภัย</p>
+                            <h4>ขายหน้าร้าน หรือแชร์ QR รับออเดอร์</h4>
+                            <p>คิดเงินด่วนหน้าเคาน์เตอร์ หรือพิมพ์ QR Code แปะโต๊ะและหน้าร้านให้ลูกค้าสั่งซื้อออนไลน์ ข้อมูลแยกร้านปลอดภัย 100%</p>
                         </div>
                     </div>
                 </div>
@@ -441,7 +440,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <div class="register-panel">
             <div class="panel-header">
                 <h2>สมัครสมาชิกเปิดร้านใหม่ 🏪</h2>
-                <p>กรอกข้อมูลด้านล่างเพื่อสร้างระบบจัดการร้านอาหารของคุณ</p>
+                <p>กรอกข้อมูลด้านล่างเพื่อสร้างระบบ POS &amp; หน้าร้านออนไลน์ของคุณฟรี</p>
             </div>
 
             <?php if (!empty($error)): ?>
@@ -502,7 +501,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 oninput="updateSlugPreview(this.value)"
                             >
                         </div>
-                        <div class="slug-preview">ลิงก์สั่งอาหาร: <code id="slugPreviewText">/shop/your-shop</code></div>
+                        <div class="slug-preview">ลิงก์หน้าร้านของคุณ: <code id="slugPreviewText">/shop/your-shop</code></div>
                     </div>
 
                     <div class="modern-form-group">

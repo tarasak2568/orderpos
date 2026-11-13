@@ -77,20 +77,20 @@ $unpaidOrders = fetchAll(query("
                             <div style="background: var(--white); border: 2px solid #E0E0E0; border-radius: var(--radius); padding: 20px;">
                                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid #E0E0E0;">
                                     <div>
-                                        <h3 style="font-size: 20px; color: var(--primary);"><?= $order['table_name'] ?></h3>
-                                        <span style="font-size: 12px; color: var(--gray);">#<?= $order['order_no'] ?></span>
+                                        <h3 style="font-size: 20px; color: var(--primary);"><?= htmlspecialchars($order['table_name'] ?? '', ENT_QUOTES, 'UTF-8') ?></h3>
+                                        <span style="font-size: 12px; color: var(--gray);">#<?= htmlspecialchars($order['order_no'] ?? '', ENT_QUOTES, 'UTF-8') ?></span>
                                     </div>
                                     <span style="font-size: 24px; font-weight: 700; color: var(--primary);">฿<?= number_format($order['total_amount'], 2) ?></span>
                                 </div>
                                 <div style="margin-bottom: 15px;">
                                     <?php foreach ($items as $item): ?>
                                         <div style="display: flex; justify-content: space-between; padding: 5px 0; font-size: 14px; border-bottom: 1px solid #F0F0F0;">
-                                            <span><?= $item['quantity'] ?>x <?= $item['name'] ?></span>
+                                            <span><?= intval($item['quantity']) ?>x <?= htmlspecialchars($item['name'] ?? '', ENT_QUOTES, 'UTF-8') ?></span>
                                             <span>฿<?= number_format($item['price'] * $item['quantity'], 2) ?></span>
                                         </div>
                                     <?php endforeach; ?>
                                 </div>
-                                <button class="btn btn-success btn-lg btn-block" onclick="openPayment(<?= $order['id'] ?>, <?= $order['total_amount'] ?>, '<?= $order['table_name'] ?>')">
+                                <button class="btn btn-success btn-lg btn-block" onclick="openPayment(<?= intval($order['id']) ?>, <?= floatval($order['total_amount']) ?>, <?= htmlspecialchars(json_encode((string)($order['table_name'] ?? ''), JSON_UNESCAPED_UNICODE), ENT_QUOTES, 'UTF-8') ?>)">
                                     <i class="fas fa-money-bill"></i> รับชำระเงิน
                                 </button>
                             </div>

@@ -19,6 +19,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['shop_id'] = $shop['id'] ?? 1;
             $_SESSION['shop_name'] = $shop['shop_name'] ?? 'ร้านอาหารของเรา';
             $_SESSION['shop_slug'] = $shop['shop_slug'] ?? 'main-shop';
+            $_SESSION['shop_type'] = $shop['shop_type'] ?? 'restaurant';
             $_SESSION['username'] = $user['username'];
             $_SESSION['full_name'] = $user['full_name'];
             $_SESSION['role'] = $user['role'];
@@ -38,8 +39,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <?= renderDynamicSeoTags([
     'type' => 'platform',
-    'title' => 'เข้าสู่ระบบ - OrderPOS แพลตฟอร์มระบบจัดการร้านอาหารออนไลน์ & QR Menu',
-    'description' => 'เข้าสู่ระบบจัดการร้านอาหาร OrderPOS หรือสมัครสมาชิกเปิดร้านอาหารใหม่ฟรี ตั้งชื่อร้าน สร้าง QR Code สั่งอาหาร และจัดการออเดอร์แบบเรียลไทม์',
+    'title' => 'เข้าสู่ระบบ OrderPOS - ระบบ POS ร้านอาหาร คาเฟ่ & ร้านของชำออนไลน์ฟรี',
+    'description' => 'เข้าสู่ระบบจัดการร้าน OrderPOS หรือสมัครเปิดร้านฟรีทันที รองรับทั้งร้านอาหาร สแกน QR สั่งเข้าครัว และร้านของชำ มินิมาร์ท สแกนบาร์โค้ด ตัดสต๊อก รับพร้อมเพย์ครบในระบบเดียว',
+    'keywords' => getOrderPosKeywordSets()['platform'],
     'canonical' => getBaseSiteUrl() . '/login.php'
 ]) ?>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
@@ -501,41 +503,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <div class="login-showcase">
             <div>
                 <div class="showcase-badge">
-                    <i class="fas fa-bolt"></i> Smart Restaurant POS System
+                    <i class="fas fa-bolt"></i> Smart Cloud POS สำหรับร้านอาหาร &amp; ร้านค้าปลีก
                 </div>
                 <div class="showcase-brand">
                     <div class="showcase-brand-icon">
-                        <i class="fas fa-utensils"></i>
+                        <i class="fas fa-cash-register"></i>
                     </div>
                     <div>
                         <h1>OrderPOS</h1>
-                        <span>ระบบบริหารจัดการร้านอาหารครบวงจร</span>
+                        <span>ระบบจัดการร้านอาหาร &amp; ร้านของชำครบวงจร</span>
                     </div>
                 </div>
                 <p class="showcase-desc">
-                    ยกระดับการจัดการร้านอาหารของคุณให้รวดเร็ว แม่นยำ และทันสมัย เชื่อมต่อหน้าร้าน ห้องครัว และระบบสั่งอาหารผ่าน QR Code แบบเรียลไทม์
+                    เปลี่ยนมือถือและแท็บเล็ตให้เป็นเครื่องคิดเงิน POS มืออาชีพ ครบทั้ง QR สั่งอาหารเข้าครัวสำหรับร้านอาหาร และยิงบาร์โค้ดตัดสต๊อกอัตโนมัติสำหรับร้านของชำและมินิมาร์ท
                 </p>
 
                 <div class="feature-list">
                     <div class="feature-item">
-                        <div class="feature-icon"><i class="fas fa-cash-register"></i></div>
+                        <div class="feature-icon"><i class="fas fa-barcode"></i></div>
                         <div class="feature-text">
-                            <h4>ขายหน้าร้าน & คิดเงินไว</h4>
-                            <p>รองรับเงินสด โอน และ PromptPay พร้อมสรุปยอดทันที</p>
+                            <h4>คิดเงินไว &amp; ยิงบาร์โค้ดตัดสต๊อกทันที</h4>
+                            <p>รองรับเงินสด เงินโอน และสแกน PromptPay QR พร้อมคำนวณเงินทอนอัตโนมัติ</p>
                         </div>
                     </div>
                     <div class="feature-item">
                         <div class="feature-icon"><i class="fas fa-qrcode"></i></div>
                         <div class="feature-text">
-                            <h4>สั่งอาหารผ่านมือถือ (QR Table)</h4>
-                            <p>ลูกค้าสแกนสั่งอาหารจากโต๊ะ ส่งตรงเข้าครัวอัตโนมัติ</p>
+                            <h4>หน้าร้านออนไลน์ &amp; QR Menu ประจำโต๊ะ</h4>
+                            <p>สร้างลิงก์หน้าร้านพร้อมติด Google SEO และพิมพ์ QR ให้ลูกค้าสแกนสั่งได้ทันที</p>
                         </div>
                     </div>
                     <div class="feature-item">
                         <div class="feature-icon"><i class="fas fa-kitchen-set"></i></div>
                         <div class="feature-text">
-                            <h4>ระบบจอห้องครัว Real-time</h4>
-                            <p>ติดตามสถานะออเดอร์ กำลังทำ เสิร์ฟแล้ว แบบไม่มีตกหล่น</p>
+                            <h4>จอห้องครัว KDS &amp; สรุปยอดขายเรียลไทม์</h4>
+                            <p>ติดตามออเดอร์สดทุกขั้นตอน ป้องกันตกหล่น ดูยอดขายและสต๊อกคงเหลือได้ทุกที่</p>
                         </div>
                     </div>
                 </div>

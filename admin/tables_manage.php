@@ -3,7 +3,7 @@
 <div class="card">
     <div class="card-header">
         <h3><i class="fas fa-chair"></i> จัดการโต๊ะ</h3>
-        <button class="btn btn-primary" onclick="openModal('tableModal')">
+        <button class="btn btn-primary" onclick="openAddTableModal()">
             <i class="fas fa-plus"></i> เพิ่มโต๊ะ
         </button>
     </div>
@@ -47,6 +47,14 @@
                 <label>จำนวนที่นั่ง</label>
                 <input type="number" id="tableCapacity" value="4" min="1">
             </div>
+            <div class="form-group">
+                <label>สถานะโต๊ะ</label>
+                <select id="tableStatus">
+                    <option value="available">ว่าง (พร้อมรับลูกค้า)</option>
+                    <option value="occupied">ไม่ว่าง (มีลูกค้าใช้งาน)</option>
+                    <option value="reserved">จองแล้ว</option>
+                </select>
+            </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-outline" onclick="closeModal('tableModal')">ยกเลิก</button>
                 <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> บันทึก</button>
@@ -56,24 +64,56 @@
 </div>
 
 <script>
+let loadedTables = [];
+
+function escHtml(str) {
+    return String(str ?? '').replace(/[&<>"']/g, s => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[s]));
+}
+
+function openAddTableModal() {
+    document.getElementById('tableForm').reset();
+    document.getElementById('tableId').value = '';
+    document.getElementById('tableCapacity').value = 4;
+    document.getElementById('tableStatus').value = 'available';
+    document.getElementById('tableModalTitle').textContent = 'เพิ่มโต๊ะ';
+    openModal('tableModal');
+}
+
+function editTable(id) {
+    const t = loadedTables.find(row => row.id == id);
+    if (!t) return;
+    document.getElementById('tableId').value = t.id;
+    document.getElementById('tableCode').value = t.table_code || '';
+    document.getElementById('tableName').value = t.table_name || '';
+    document.getElementById('tableCapacity').value = t.capacity || 4;
+    document.getElementById('tableStatus').value = t.status || 'available';
+    document.getElementById('tableModalTitle').textContent = 'แก้ไขข้อมูลโต๊ะ';
+    openModal('tableModal');
+}
+
 async function loadTables() {
     try {
         const result = await API.get('tables.php');
         const tbody = document.getElementById('tableBody');
         if (!result.success || result.data.length === 0) {
+            loadedTables = [];
             tbody.innerHTML = '<tr><td colspan="5" class="text-center text-gray">ยังไม่มีโต๊ะ</td></tr>';
             return;
         }
+        loadedTables = result.data;
         let html = '';
         result.data.forEach(t => {
             const statusText = t.status === 'available' ? 'ว่าง' : t.status === 'occupied' ? 'ไม่ว่าง' : 'จอง';
             html += `<tr>
-                <td><strong>${t.table_code}</strong></td>
-                <td>${t.table_name}</td>
-                <td>${t.capacity} ที่นั่ง</td>
-                <td><span class="badge badge-${t.status}">${statusText}</span></td>
+                <td><strong>${escHtml(t.table_code)}</strong></td>
+                <td>${escHtml(t.table_name)}</td>
+                <td>${escHtml(t.capacity)} ที่นั่ง</td>
+                <td><span class="badge badge-${escHtml(t.status)}">${statusText}</span></td>
                 <td class="actions">
-                    <button class="btn btn-sm btn-danger" onclick="deleteTable(${t.id})"><i class="fas fa-trash"></i></button>
+                    <button class="btn btn-sm btn-info" onclick="editTable(${t.id})" title="แก้ไขโต๊ะ"><i class="fas fa-edit"></i></button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteTable(${t.id})" title="ลบโต๊ะ"><i class="fas fa-trash"></i></button>
                 </td>
             </tr>`;
         });
@@ -85,16 +125,29 @@ async function loadTables() {
 
 async function saveTable(event) {
     event.preventDefault();
+    const id = document.getElementById('tableId').value.trim();
     const data = {
-        table_code: document.getElementById('tableCode').value,
-        table_name: document.getElementById('tableName').value,
-        capacity: document.getElementById('tableCapacity').value
+        table_code: document.getElementById('tableCode').value.trim(),
+        table_name: document.getElementById('tableName').value.trim(),
+        capacity: parseInt(document.getElementById('tableCapacity').value, 10) || 4,
+        status: document.getElementById('tableStatus').value || 'available'
     };
     try {
-        await API.post('tables.php', data);
-        showToast('เพิ่มโต๊ะเรียบร้อย', 'success');
+        let res;
+        if (id) {
+            data.id = id;
+            res = await API.put('tables.php', data);
+        } else {
+            res = await API.post('tables.php', data);
+        }
+        if (res && res.success === false) {
+            showToast(res.error || 'ไม่สามารถบันทึกได้', 'error');
+            return;
+        }
+        showToast(id ? 'อัปเดตข้อมูลโต๊ะเรียบร้อย' : 'เพิ่มโต๊ะเรียบร้อย', 'success');
         closeModal('tableModal');
         document.getElementById('tableForm').reset();
+        document.getElementById('tableId').value = '';
         loadTables();
     } catch (error) {
         showToast('ไม่สามารถบันทึกได้', 'error');
