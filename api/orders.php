@@ -1,9 +1,11 @@
 <?php
 require_once '../config/db.php';
+require_once '../config/saas.php';
 header('Content-Type: application/json; charset=utf-8');
 
 $method = $_SERVER['REQUEST_METHOD'];
 $action = $_GET['action'] ?? '';
+$shopId = currentShopId();
 
 switch ($action) {
     case 'create':
@@ -19,6 +21,10 @@ switch ($action) {
             echo json_encode(['success' => false, 'error' => 'ข้อมูลไม่ครบถ้วน'], JSON_UNESCAPED_UNICODE);
             exit;
         }
+
+        if (!empty($input['shop_id'])) {
+            $shopId = intval($input['shop_id']);
+        }
         
         $table_code = escape($input['table_id']);
         $note = escape($input['note'] ?? '');
@@ -29,19 +35,26 @@ switch ($action) {
             exit;
         }
         
-        // หา table id จาก table_code
-        $tableResult = query("SELECT id FROM tables WHERE table_code = '$table_code'");
+        // หา table id จาก table_code ของร้านนี้
+        $tableResult = query("SELECT id FROM tables WHERE shop_id = $shopId AND table_code = '$table_code' LIMIT 1");
         $table = fetchOne($tableResult);
         
         if (!$table) {
-            echo json_encode(['success' => false, 'error' => "ไม่พบโต๊ะ '$table_code'"], JSON_UNESCAPED_UNICODE);
-            exit;
+            // ถ้ายังไม่มีรหัสโต๊ะนี้ในร้าน ให้หยิบโต๊ะแรกของร้านหรือสร้างให้อัตโนมัติ
+            $firstTable = fetchOne(query("SELECT id FROM tables WHERE shop_id = $shopId ORDER BY id ASC LIMIT 1"));
+            if ($firstTable) {
+                $table = $firstTable;
+            } else {
+                query("INSERT INTO tables (shop_id, table_code, table_name, capacity, status) VALUES ($shopId, '$table_code', 'โต๊ะ $table_code', 4, 'occupied')");
+                global $conn;
+                $table = ['id' => $conn->insert_id];
+            }
         }
         
         $tableId = intval($table['id']);
         
         // สร้าง order_no (ป้องกัน duplicate)
-        $orderNo = 'ORD-' . date('Ymd') . '-' . str_pad(mt_rand(1, 9999), 4, '0', STR_PAD_LEFT);
+        $orderNo = 'ORD-' . $shopId . '-' . date('ymd') . '-' . str_pad(mt_rand(1, 9999), 4, '0', STR_PAD_LEFT);
         
         // คำนวณยอดรวม
         $totalAmount = 0;
@@ -49,9 +62,9 @@ switch ($action) {
             $totalAmount += floatval($item['price']) * intval($item['quantity']);
         }
         
-        // สร้างออเดอร์
-        $orderResult = query("INSERT INTO orders (order_no, table_id, note, total_amount, status, payment_status) 
-               VALUES ('$orderNo', $tableId, '$note', $totalAmount, 'pending', 'unpaid')");
+        // สร้างออเดอร์ผูกกับ shop_id
+        $orderResult = query("INSERT INTO orders (shop_id, order_no, table_id, note, total_amount, status, payment_status) 
+               VALUES ($shopId, '$orderNo', $tableId, '$note', $totalAmount, 'pending', 'unpaid')");
         
         if (!$orderResult) {
             global $conn;
@@ -74,7 +87,7 @@ switch ($action) {
         }
         
         // อัปเดตสถานะโต๊ะเป็น occupied
-        query("UPDATE tables SET status = 'occupied' WHERE id = $tableId");
+        query("UPDATE tables SET status = 'occupied' WHERE id = $tableId AND shop_id = $shopId");
         
         echo json_encode([
             'success' => true, 
@@ -87,18 +100,17 @@ switch ($action) {
         break;
         
     case 'kitchen':
-        // ดึงออเดอร์ที่ยังไม่เสร็จสำหรับครัว
+        // ดึงออเดอร์ที่ยังไม่เสร็จสำหรับครัวเฉพาะของร้านนี้
         $result = query("
             SELECT o.*, t.table_name, t.table_code 
             FROM orders o 
             LEFT JOIN tables t ON o.table_id = t.id 
-            WHERE o.status IN ('pending', 'preparing', 'ready') 
+            WHERE o.shop_id = $shopId AND o.status IN ('pending', 'preparing', 'ready') 
             ORDER BY o.created_at ASC
         ");
         
         $orders = fetchAll($result);
         
-        // ดึงรายการอาหารของแต่ละออเดอร์
         foreach ($orders as &$order) {
             $itemsResult = query("
                 SELECT oi.*, mi.name 
@@ -130,26 +142,25 @@ switch ($action) {
             exit;
         }
         
-        query("UPDATE orders SET status = '$status' WHERE id = $orderId");
+        query("UPDATE orders SET status = '$status' WHERE id = $orderId AND shop_id = $shopId");
         
-        // ถ้าเป็น served หรือ paid ให้อัปเดตสถานะโต๊ะ
         if ($status === 'paid') {
-            $orderResult = query("SELECT table_id FROM orders WHERE id = $orderId");
+            $orderResult = query("SELECT table_id FROM orders WHERE id = $orderId AND shop_id = $shopId");
             $order = fetchOne($orderResult);
             if ($order) {
-                query("UPDATE tables SET status = 'available' WHERE id = {$order['table_id']}");
+                query("UPDATE tables SET status = 'available' WHERE id = {$order['table_id']} AND shop_id = $shopId");
             }
-            query("UPDATE orders SET payment_status = 'paid', paid_at = NOW() WHERE id = $orderId");
+            query("UPDATE orders SET payment_status = 'paid', paid_at = NOW() WHERE id = $orderId AND shop_id = $shopId");
         }
         
         echo json_encode(['success' => true, 'message' => 'อัปเดตสถานะเรียบร้อย'], JSON_UNESCAPED_UNICODE);
         break;
         
     case 'list':
-        $status = $_GET['status'] ?? '';
-        $where = '';
+        $status = escape($_GET['status'] ?? '');
+        $where = "WHERE o.shop_id = $shopId";
         if ($status) {
-            $where = "WHERE o.status = '$status'";
+            $where .= " AND o.status = '$status'";
         }
         
         $result = query("
@@ -176,9 +187,8 @@ switch ($action) {
         break;
         
     case 'billing':
-        // ดึงออเดอร์ที่ยังไม่ได้ชำระเงินสำหรับหน้าเก็บเงิน
-        $tableCode = $_GET['table_code'] ?? '';
-        $where = "WHERE o.payment_status = 'unpaid' AND o.status IN ('served', 'ready')";
+        $tableCode = escape($_GET['table_code'] ?? '');
+        $where = "WHERE o.shop_id = $shopId AND o.payment_status = 'unpaid' AND o.status IN ('served', 'ready')";
         
         if ($tableCode) {
             $where .= " AND t.table_code = '$tableCode'";
@@ -218,7 +228,7 @@ switch ($action) {
         $paymentMethod = escape($input['payment_method'] ?? 'cash');
         $cashReceived = floatval($input['cash_received'] ?? 0);
         
-        $orderResult = query("SELECT * FROM orders WHERE id = $orderId");
+        $orderResult = query("SELECT * FROM orders WHERE id = $orderId AND shop_id = $shopId");
         $order = fetchOne($orderResult);
         
         if (!$order) {
@@ -228,21 +238,18 @@ switch ($action) {
         
         $changeAmount = $cashReceived - floatval($order['total_amount']);
         
-        // บันทึกการชำระเงิน
-        query("INSERT INTO payments (order_id, amount, payment_method, cash_received, change_amount) 
-               VALUES ($orderId, {$order['total_amount']}, '$paymentMethod', $cashReceived, $changeAmount)");
+        query("INSERT INTO payments (shop_id, order_id, amount, payment_method, cash_received, change_amount) 
+               VALUES ($shopId, $orderId, {$order['total_amount']}, '$paymentMethod', $cashReceived, $changeAmount)");
         
-        // อัปเดตออเดอร์
         query("UPDATE orders SET 
                payment_status = 'paid', 
                status = 'paid',
                payment_method = '$paymentMethod',
                paid_at = NOW() 
-               WHERE id = $orderId");
+               WHERE id = $orderId AND shop_id = $shopId");
         
-        // อัปเดตสถานะโต๊ะ
-        $tableId = $order['table_id'];
-        query("UPDATE tables SET status = 'available' WHERE id = $tableId");
+        $tableId = intval($order['table_id']);
+        query("UPDATE tables SET status = 'available' WHERE id = $tableId AND shop_id = $shopId");
         
         echo json_encode([
             'success' => true, 
@@ -254,23 +261,22 @@ switch ($action) {
         break;
         
     case 'dashboard':
-        // ข้อมูลสำหรับหน้า Dashboard
         $today = date('Y-m-d');
         
-        // ยอดขายวันนี้
-        $salesResult = query("SELECT COALESCE(SUM(total_amount), 0) as total FROM orders WHERE DATE(created_at) = '$today' AND payment_status = 'paid'");
+        // ยอดขายวันนี้เฉพาะร้านนี้
+        $salesResult = query("SELECT COALESCE(SUM(total_amount), 0) as total FROM orders WHERE shop_id = $shopId AND DATE(created_at) = '$today' AND payment_status = 'paid'");
         $sales = fetchOne($salesResult);
         
         // จำนวนออเดอร์วันนี้
-        $orderCountResult = query("SELECT COUNT(*) as count FROM orders WHERE DATE(created_at) = '$today'");
+        $orderCountResult = query("SELECT COUNT(*) as count FROM orders WHERE shop_id = $shopId AND DATE(created_at) = '$today'");
         $orderCount = fetchOne($orderCountResult);
         
         // ออเดอร์ที่รอดำเนินการ
-        $pendingResult = query("SELECT COUNT(*) as count FROM orders WHERE status IN ('pending', 'preparing', 'ready')");
+        $pendingResult = query("SELECT COUNT(*) as count FROM orders WHERE shop_id = $shopId AND status IN ('pending', 'preparing', 'ready')");
         $pending = fetchOne($pendingResult);
         
         // โต๊ะที่ถูกใช้งาน
-        $occupiedResult = query("SELECT COUNT(*) as count FROM tables WHERE status = 'occupied'");
+        $occupiedResult = query("SELECT COUNT(*) as count FROM tables WHERE shop_id = $shopId AND status = 'occupied'");
         $occupied = fetchOne($occupiedResult);
         
         // ออเดอร์ล่าสุด
@@ -278,6 +284,7 @@ switch ($action) {
             SELECT o.*, t.table_name 
             FROM orders o 
             LEFT JOIN tables t ON o.table_id = t.id 
+            WHERE o.shop_id = $shopId
             ORDER BY o.created_at DESC 
             LIMIT 10
         ");

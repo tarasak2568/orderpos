@@ -1,18 +1,24 @@
 <?php
-session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 if (!isset($_SESSION['user_id'])) {
     header('Location: login.php');
     exit;
 }
 
 require_once 'config/db.php';
+require_once 'config/seo.php';
 
-// ดึงข้อมูลโต๊ะที่ยังไม่ได้ชำระเงิน
+$shopId = currentShopId();
+$currentShop = getCurrentShop($shopId);
+
+// ดึงข้อมูลโต๊ะที่ยังไม่ได้ชำระเงินเฉพาะร้านนี้
 $unpaidOrders = fetchAll(query("
     SELECT o.*, t.table_name, t.table_code 
     FROM orders o 
     LEFT JOIN tables t ON o.table_id = t.id 
-    WHERE o.payment_status = 'unpaid' AND o.status IN ('served', 'ready')
+    WHERE o.shop_id = $shopId AND o.payment_status = 'unpaid' AND o.status IN ('served', 'ready')
     ORDER BY o.created_at ASC
 "));
 ?>
@@ -21,7 +27,10 @@ $unpaidOrders = fetchAll(query("
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>เก็บเงิน - ระบบ POS</title>
+<?= renderDynamicSeoTags([
+    'type' => 'noindex',
+    'title' => 'เก็บเงิน - ' . $currentShop['shop_name']
+]) ?>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="assets/css/style.css">
@@ -29,8 +38,8 @@ $unpaidOrders = fetchAll(query("
 <body>
     <nav class="navbar">
         <a href="admin/dashboard.php" class="navbar-brand">
-            <i class="fas fa-utensils"></i>
-            <span>POS ร้านอาหาร</span>
+            <i class="fas fa-store"></i>
+            <span><?= htmlspecialchars($currentShop['shop_name']) ?></span>
         </a>
         <ul class="navbar-nav">
             <li><a href="admin/dashboard.php"><i class="fas fa-home"></i> หน้าแรก</a></li>

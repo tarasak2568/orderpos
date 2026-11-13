@@ -1,21 +1,30 @@
 <?php
-session_start();
 require_once 'config/db.php';
+require_once 'config/seo.php';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $username = escape($_POST['username']);
     $password = $_POST['password'];
     
-    $result = query("SELECT * FROM users WHERE username = '$username'");
+    $result = query("SELECT * FROM users WHERE username = '$username' LIMIT 1");
     $user = fetchOne($result);
     
     if ($user && password_verify($password, $user['password'])) {
-        $_SESSION['user_id'] = $user['id'];
-        $_SESSION['username'] = $user['username'];
-        $_SESSION['full_name'] = $user['full_name'];
-        $_SESSION['role'] = $user['role'];
-        header('Location: admin/dashboard.php');
-        exit;
+        $shopId = intval($user['shop_id'] ?? 1);
+        $shop = getCurrentShop($shopId);
+        if (isset($shop['is_active']) && intval($shop['is_active']) === 0 && $user['role'] !== 'superadmin') {
+            $error = 'ร้านค้านี้ถูกระงับการใช้งานชั่วคราว กรุณาติดต่อผู้ดูแลระบบ';
+        } else {
+            $_SESSION['user_id'] = $user['id'];
+            $_SESSION['shop_id'] = $shop['id'] ?? 1;
+            $_SESSION['shop_name'] = $shop['shop_name'] ?? 'ร้านอาหารของเรา';
+            $_SESSION['shop_slug'] = $shop['shop_slug'] ?? 'main-shop';
+            $_SESSION['username'] = $user['username'];
+            $_SESSION['full_name'] = $user['full_name'];
+            $_SESSION['role'] = $user['role'];
+            header('Location: admin/dashboard.php');
+            exit;
+        }
     } else {
         $error = 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง';
     }
@@ -26,7 +35,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>เข้าสู่ระบบ - OrderPOS ระบบจัดการร้านอาหารยุคใหม่</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<?= renderDynamicSeoTags([
+    'type' => 'platform',
+    'title' => 'เข้าสู่ระบบ - OrderPOS แพลตฟอร์มระบบจัดการร้านอาหารออนไลน์ & QR Menu',
+    'description' => 'เข้าสู่ระบบจัดการร้านอาหาร OrderPOS หรือสมัครสมาชิกเปิดร้านอาหารใหม่ฟรี ตั้งชื่อร้าน สร้าง QR Code สั่งอาหาร และจัดการออเดอร์แบบเรียลไทม์',
+    'canonical' => getBaseSiteUrl() . '/login.php'
+]) ?>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="assets/css/style.css?v=8">
@@ -586,6 +601,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <span>เข้าสู่ระบบจัดการร้าน</span>
                 </button>
             </form>
+
+            <div style="margin-top: 16px; text-align: center;">
+                <a href="register.php" style="display:flex;align-items:center;justify-content:center;gap:8px;padding:12px 16px;border-radius:12px;border:1.5px dashed #FF6B35;background:#FFF7ED;color:#EA580C;text-decoration:none;font-weight:600;font-size:14px;transition:all 0.2s;">
+                    <i class="fas fa-store"></i>
+                    <span>ยังไม่มีร้านค้า? สมัครสมาชิกเปิดร้านใหม่ฟรี</span>
+                </a>
+            </div>
 
             <div class="divider">หรือทางลัดสำหรับหน้าร้าน</div>
 

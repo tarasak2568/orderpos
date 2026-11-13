@@ -1,12 +1,14 @@
 <?php
 require_once '../config/db.php';
+require_once '../config/saas.php';
 header('Content-Type: application/json; charset=utf-8');
 
 $method = $_SERVER['REQUEST_METHOD'];
+$shopId = currentShopId();
 
 switch ($method) {
     case 'GET':
-        $where = "WHERE mi.is_available = 1";
+        $where = "WHERE mi.shop_id = $shopId AND mi.is_available = 1";
         
         if (isset($_GET['category_id'])) {
             $catId = intval($_GET['category_id']);
@@ -27,9 +29,9 @@ switch ($method) {
         ");
         $data = fetchAll($result);
         
-        // แปลง price และ id เป็นตัวเลข
         foreach ($data as &$item) {
             $item['id'] = intval($item['id']);
+            $item['shop_id'] = intval($item['shop_id']);
             $item['category_id'] = intval($item['category_id']);
             $item['price'] = floatval($item['price']);
             $item['is_available'] = intval($item['is_available']);
@@ -48,8 +50,8 @@ switch ($method) {
         $image = escape($input['image'] ?? '');
         $is_recommended = intval($input['is_recommended'] ?? 0);
         
-        query("INSERT INTO menu_items (category_id, name, description, price, image, is_recommended) 
-               VALUES ($category_id, '$name', '$description', $price, '$image', $is_recommended)");
+        query("INSERT INTO menu_items (shop_id, category_id, name, description, price, image, is_recommended) 
+               VALUES ($shopId, $category_id, '$name', '$description', $price, '$image', $is_recommended)");
         
         echo json_encode(['success' => true, 'message' => 'เพิ่มเมนูเรียบร้อย', 'id' => $conn->insert_id], JSON_UNESCAPED_UNICODE);
         break;
@@ -67,14 +69,14 @@ switch ($method) {
         query("UPDATE menu_items SET 
                category_id=$category_id, name='$name', description='$description', 
                price=$price, is_available=$is_available, is_recommended=$is_recommended 
-               WHERE id=$id");
+               WHERE id=$id AND shop_id=$shopId");
         
         echo json_encode(['success' => true, 'message' => 'อัปเดตเมนูเรียบร้อย'], JSON_UNESCAPED_UNICODE);
         break;
         
     case 'DELETE':
         $id = intval($_GET['id'] ?? 0);
-        query("DELETE FROM menu_items WHERE id=$id");
+        query("DELETE FROM menu_items WHERE id=$id AND shop_id=$shopId");
         echo json_encode(['success' => true, 'message' => 'ลบเมนูเรียบร้อย'], JSON_UNESCAPED_UNICODE);
         break;
 }

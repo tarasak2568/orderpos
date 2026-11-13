@@ -1,26 +1,39 @@
 <?php
-session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 if (!isset($_SESSION['user_id'])) {
     header('Location: ../login.php');
     exit;
 }
+require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/../config/seo.php';
+
+$currentShop = getCurrentShop($_SESSION['shop_id'] ?? 1);
+$_SESSION['shop_id'] = intval($currentShop['id']);
+$_SESSION['shop_name'] = $currentShop['shop_name'];
+$_SESSION['shop_slug'] = $currentShop['shop_slug'];
 ?>
 <!DOCTYPE html>
 <html lang="th">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ระบบ POS ร้านอาหาร</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<?= renderDynamicSeoTags([
+    'type' => 'noindex',
+    'title' => htmlspecialchars($currentShop['shop_name']) . ' - ระบบจัดการร้าน OrderPOS'
+]) ?>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="../assets/css/style.css?v=7">
+    <link rel="stylesheet" href="../assets/css/style.css?v=8">
 </head>
 <body>
     <!-- Navbar -->
     <nav class="navbar">
         <a href="dashboard.php" class="navbar-brand">
-            <i class="fas fa-utensils"></i>
-            <span>POS ร้านอาหาร</span>
+            <i class="fas fa-store"></i>
+            <span><?= htmlspecialchars($currentShop['shop_name']) ?></span>
         </a>
         <ul class="navbar-nav">
             <li><a href="dashboard.php" class="<?= basename($_SERVER['PHP_SELF']) == 'dashboard.php' ? 'active' : '' ?>"><i class="fas fa-home"></i> หน้าแรก</a></li>
@@ -30,9 +43,10 @@ if (!isset($_SESSION['user_id'])) {
             <li><a href="tables_manage.php" class="<?= basename($_SERVER['PHP_SELF']) == 'tables_manage.php' ? 'active' : '' ?>"><i class="fas fa-chair"></i> จัดการโต๊ะ</a></li>
             <li><a href="qr_tables.php" class="<?= basename($_SERVER['PHP_SELF']) == 'qr_tables.php' ? 'active' : '' ?>"><i class="fas fa-qrcode"></i> QR Code</a></li>
             <li><a href="orders_manage.php" class="<?= basename($_SERVER['PHP_SELF']) == 'orders_manage.php' ? 'active' : '' ?>"><i class="fas fa-clipboard-list"></i> ออเดอร์</a></li>
+            <li><a href="shop_settings.php" class="<?= basename($_SERVER['PHP_SELF']) == 'shop_settings.php' ? 'active' : '' ?>"><i class="fas fa-sliders"></i> ตั้งค่าร้าน & SEO</a></li>
         </ul>
         <div class="navbar-right">
-            <span class="user-info"><i class="fas fa-user"></i> <?= $_SESSION['full_name'] ?></span>
+            <span class="user-info"><i class="fas fa-user"></i> <?= htmlspecialchars($_SESSION['full_name']) ?></span>
             <a href="../logout.php" class="btn btn-sm btn-danger"><i class="fas fa-sign-out-alt"></i> ออกจากระบบ</a>
         </div>
     </nav>
@@ -50,8 +64,9 @@ if (!isset($_SESSION['user_id'])) {
                 <li><a href="tables_manage.php" class="<?= basename($_SERVER['PHP_SELF']) == 'tables_manage.php' ? 'active' : '' ?>"><i class="fas fa-chair"></i> จัดการโต๊ะ</a></li>
                 <li><a href="qr_tables.php" class="<?= basename($_SERVER['PHP_SELF']) == 'qr_tables.php' ? 'active' : '' ?>"><i class="fas fa-qrcode"></i> QR Code โต๊ะ</a></li>
                 <li><a href="orders_manage.php" class="<?= basename($_SERVER['PHP_SELF']) == 'orders_manage.php' ? 'active' : '' ?>"><i class="fas fa-clipboard-list"></i> ดูออเดอร์</a></li>
+                <li><a href="shop_settings.php" class="<?= basename($_SERVER['PHP_SELF']) == 'shop_settings.php' ? 'active' : '' ?>"><i class="fas fa-sliders"></i> ตั้งค่าร้าน & SEO</a></li>
                 <li><hr style="margin: 10px 20px; border-color: #E0E0E0;"></li>
-                <li><a href="../menu.php" target="_blank"><i class="fas fa-external-link-alt"></i> ดูเมนู (ลูกค้า)</a></li>
+                <li><a href="../menu.php?shop=<?= urlencode($currentShop['shop_slug']) ?>" target="_blank"><i class="fas fa-external-link-alt"></i> ดูเมนูหน้าร้าน (ลูกค้า)</a></li>
                 <li><a href="../logout.php"><i class="fas fa-sign-out-alt"></i> ออกจากระบบ</a></li>
             </ul>
         </aside>

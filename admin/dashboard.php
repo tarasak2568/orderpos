@@ -1,8 +1,21 @@
 <?php require_once 'header.php'; ?>
 
+<?php if (!empty($_GET['welcome'])): ?>
+<div style="background:linear-gradient(135deg,#FFF7ED,#FFEDD5);border:1.5px solid #FDBA74;color:#9A3412;padding:18px 22px;border-radius:14px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+    <div>
+        <h3 style="margin:0 0 4px 0;font-size:18px;"><i class="fas fa-party-horn"></i> ยินดีต้อนรับสู่ระบบจัดการร้าน "<?= htmlspecialchars($currentShop['shop_name']) ?>"!</h3>
+        <p style="margin:0;font-size:13.5px;">ระบบได้สร้างหมวดหมู่ เมนูตัวอย่าง และโต๊ะเริ่มต้นให้ร้านของคุณเรียบร้อยแล้ว คุณสามารถแก้ไขเมนูหรือพิมพ์ QR Code ประจำโต๊ะได้ทันที</p>
+    </div>
+    <div style="display:flex;gap:8px;">
+        <a href="qr_tables.php" class="btn btn-primary btn-sm"><i class="fas fa-qrcode"></i> ดู QR Code โต๊ะ</a>
+        <a href="shop_settings.php" class="btn btn-outline btn-sm"><i class="fas fa-sliders"></i> ตั้งค่าร้าน & SEO</a>
+    </div>
+</div>
+<?php endif; ?>
+
 <div class="card">
     <div class="card-header">
-        <h3><i class="fas fa-chart-bar"></i> ภาพรวมร้านวันนี้</h3>
+        <h3><i class="fas fa-chart-bar"></i> ภาพรวมร้าน "<?= htmlspecialchars($currentShop['shop_name']) ?>" วันนี้</h3>
         <span style="color: var(--gray); font-size: 14px;"><?= date('d/m/Y') ?></span>
     </div>
     <div class="card-body">

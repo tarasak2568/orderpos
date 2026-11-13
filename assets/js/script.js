@@ -138,14 +138,30 @@ class CustomerMenu {
     this.currentCategory = "all";
     this.menuItems = [];
     this.categories = [];
+    this.shopId = this.getShopId();
     this.tableId = this.getTableId();
 
     this.init();
   }
 
-  getTableId() {
+  getShopId() {
+    if (window.ORDERPOS_SHOP && window.ORDERPOS_SHOP.shopId) {
+      return window.ORDERPOS_SHOP.shopId;
+    }
+    const pageEl = document.querySelector(".menu-page");
+    if (pageEl && pageEl.dataset.shopId) {
+      return parseInt(pageEl.dataset.shopId, 10) || 1;
+    }
     const params = new URLSearchParams(window.location.search);
-    return params.get("table_id") || "T01";
+    return parseInt(params.get("shop_id"), 10) || 1;
+  }
+
+  getTableId() {
+    if (window.ORDERPOS_SHOP && window.ORDERPOS_SHOP.tableId) {
+      return window.ORDERPOS_SHOP.tableId;
+    }
+    const params = new URLSearchParams(window.location.search);
+    return params.get("table_id") || params.get("table") || "T01";
   }
 
   async init() {
@@ -159,8 +175,8 @@ class CustomerMenu {
   async loadData() {
     try {
       const [menuData, catData] = await Promise.all([
-        API.get("menu_items.php"),
-        API.get("categories.php"),
+        API.get(`menu_items.php?shop_id=${this.shopId}`),
+        API.get(`categories.php?shop_id=${this.shopId}`),
       ]);
       this.menuItems = menuData.data || [];
       this.categories = catData.data || [];
@@ -311,7 +327,8 @@ class CustomerMenu {
     const note = document.getElementById("orderNote")?.value || "";
 
     try {
-      const result = await API.post("orders.php?action=create", {
+      const result = await API.post(`orders.php?action=create&shop_id=${this.shopId}`, {
+        shop_id: this.shopId,
         table_id: this.tableId,
         items: this.cart.map((item) => ({
           menu_item_id: item.id,

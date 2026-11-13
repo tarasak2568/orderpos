@@ -1,7 +1,8 @@
 <?php require_once 'header.php'; ?>
 <?php
 require_once '../config/db.php';
-$categories = fetchAll(query("SELECT * FROM categories WHERE is_active = 1 ORDER BY sort_order ASC"));
+$shopId = currentShopId();
+$categories = fetchAll(query("SELECT * FROM categories WHERE shop_id = $shopId AND is_active = 1 ORDER BY sort_order ASC"));
 ?>
 
 <div class="card">

@@ -1,14 +1,18 @@
-# robots.txt for AstroYu - SEO & AI Optimized
-# For more info: https://www.robotstxt.org/
+# robots.txt for OrderPOS SaaS & Restaurant Directory - SEO & AI Optimized
 
 # Group 1: General Web Crawlers & AI Search Engines
 User-agent: *
 Allow: /
+Allow: /shop/
+Allow: /register.php
+Allow: /menu.php
 Disallow: /api/
 Disallow: /admin/
+Disallow: /pos.php
+Disallow: /kitchen.php
+Disallow: /billing.php
 
-# Group 2: Allow Generative AI Crawlers to index products and services
-# This helps AstroYu show up in AI search engines like ChatGPT Search, Perplexity, and Google Gemini
+# Group 2: Allow Generative AI Crawlers to index public shops & menus
 User-agent: GPTBot
 Allow: /
 
@@ -27,12 +31,12 @@ Allow: /
 User-agent: cohere-ai
 Allow: /
 
-# Group 3: Block aggressive scrapers that waste bandwidth but don't provide search value
+# Group 3: Block aggressive scrapers
 User-agent: CCBot
 Disallow: /
 
 User-agent: OMGILLCbot
 Disallow: /
 
-# Sitemap URL (Generated dynamically by @astrojs/sitemap)
-Sitemap: https://astroyu.com/sitemap-index.xml
+# Dynamic Sitemap URL
+Sitemap: https://darkseagreen-dogfish-109650.hostingersite.com/sitemap.xml

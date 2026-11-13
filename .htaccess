@@ -3,7 +3,17 @@ DirectoryIndex index.php
 <IfModule mod_rewrite.c>
   RewriteEngine On
   RewriteBase /
-  
+
+  # Dynamic XML Sitemap
+  RewriteRule ^sitemap\.xml$ sitemap.php [L]
+
+  # Friendly Registration URL
+  RewriteRule ^register/?$ register.php [L,QSA]
+
+  # Friendly Shop & Table Menu URLs (Dynamic SEO Storefront)
+  RewriteRule ^shop/([^/]+)/table/([^/]+)/?$ menu.php?shop=$1&table_id=$2 [L,QSA]
+  RewriteRule ^shop/([^/]+)/?$ menu.php?shop=$1 [L,QSA]
+
   # Forward /blog/some-slug to /blog/post.php?slug=some-slug
   # But exclude actual physical files (like post.php itself or style sheets)
   RewriteCond %{REQUEST_FILENAME} !-f
